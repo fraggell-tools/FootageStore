@@ -1,0 +1,15 @@
+services:
+  deploy-webhook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3701:3701"
+    environment:
+      - WEBHOOK_SECRET=footagestore-deploy-2024
+      - REPO_DIR=/repo
+      - COMPOSE_PROJECT=app
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /mnt/user/appdata/footagestore/repo:/repo
+    restart: unless-stopped
