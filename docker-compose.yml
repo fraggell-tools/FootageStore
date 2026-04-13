@@ -10,7 +10,9 @@ services:
       - REDIS_URL=redis://redis:6379
       - DATA_DIR=/data
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
     volumes:
       - /mnt/user/appdata/footagestore/data:/data
     depends_on:
