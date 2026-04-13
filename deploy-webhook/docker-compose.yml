@@ -11,5 +11,5 @@ services:
       - COMPOSE_PROJECT=app
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /mnt/user/appdata/footagestore/repo:/repo
+      - /mnt/user/appdata/footagestore/app:/repo
     restart: unless-stopped
