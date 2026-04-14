@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 
 interface Clip {
   id: string;
@@ -10,11 +10,13 @@ interface Clip {
   duration: number;
   width: number;
   height: number;
-  fileSizeBytes: number;
+  fileSizeBytes?: number;
+  fileSize?: number;
   codec: string;
   fps: number;
   originalFilename: string;
-  uploadedAt: string;
+  uploadedAt?: string;
+  createdAt?: string;
   hasThumbnail: boolean;
   hasSpriteSheet: boolean;
 }
@@ -33,14 +35,17 @@ function formatDuration(seconds: number): string {
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
+  if (!bytes || bytes === 0) return "-";
   const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -48,6 +53,9 @@ function formatDate(dateStr: string): string {
 }
 
 export default function ClipDetailModal({ clip, onClose }: ClipDetailModalProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -68,14 +76,29 @@ export default function ClipDetailModal({ clip, onClose }: ClipDetailModalProps)
     if (e.target === e.currentTarget) onClose();
   };
 
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play();
+      setIsPlaying(true);
+    } else {
+      video.pause();
+      setIsPlaying(false);
+    }
+  };
+
   const thumbnailUrl = clip.hasThumbnail
     ? `/api/assets/${clip.id}/thumbnail.jpg`
-    : null;
+    : undefined;
+
+  const sizeBytes = clip.fileSizeBytes || clip.fileSize || 0;
+  const dateStr = clip.uploadedAt || clip.createdAt;
 
   const metadataItems = [
     { label: "Duration", value: formatDuration(clip.duration) },
     { label: "Resolution", value: `${clip.width} x ${clip.height}` },
-    { label: "File Size", value: formatBytes(clip.fileSizeBytes) },
+    { label: "File Size", value: formatBytes(sizeBytes) },
     { label: "Codec", value: clip.codec || "-" },
     { label: "FPS", value: clip.fps ? `${clip.fps}` : "-" },
     { label: "Original Filename", value: clip.originalFilename || "-" },
@@ -99,26 +122,34 @@ export default function ClipDetailModal({ clip, onClose }: ClipDetailModalProps)
           </button>
         </div>
 
-        {/* Video preview area */}
+        {/* Video player */}
         <div className="px-6">
-          <div className="relative aspect-video rounded-lg overflow-hidden bg-bg border border-border">
-            {thumbnailUrl ? (
-              <img
-                src={thumbnailUrl}
-                alt={clip.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-neutral-800 to-neutral-900" />
-            )}
-            {/* Play icon overlay */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center border border-white/20">
-                <svg className="w-7 h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+          <div
+            className="relative rounded-lg overflow-hidden bg-black cursor-pointer"
+            style={{ aspectRatio: clip.width && clip.height ? `${clip.width}/${clip.height}` : "16/9", maxHeight: "60vh" }}
+            onClick={togglePlay}
+          >
+            <video
+              ref={videoRef}
+              src={`/api/clips/${clip.id}/download`}
+              poster={thumbnailUrl}
+              className="w-full h-full object-contain"
+              preload="metadata"
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => setIsPlaying(false)}
+              controls={isPlaying}
+            />
+            {/* Play icon overlay - only when not playing */}
+            {!isPlaying && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center border border-white/20 hover:bg-black/70 transition-colors">
+                  <svg className="w-7 h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -129,7 +160,7 @@ export default function ClipDetailModal({ clip, onClose }: ClipDetailModalProps)
             <div className="flex items-center gap-3 mt-1.5 text-sm text-muted">
               <span>{clip.clientName}</span>
               <span className="text-border">&middot;</span>
-              <span>{formatDate(clip.uploadedAt)}</span>
+              <span>{formatDate(dateStr)}</span>
             </div>
           </div>
 
