@@ -70,50 +70,105 @@ export async function processClip(data: JobData): Promise<void> {
       console.log(`[processClip] Downloaded from Drive to ${inputPath}`);
     }
 
-    // 2. Extract metadata
-    console.log(`[processClip] Extracting metadata for ${clipId}`);
-    const metadata = await extractMetadata(inputPath);
-    await db
-      .update(clips)
-      .set({
-        duration: metadata.duration,
-        width: metadata.width,
-        height: metadata.height,
-        codec: metadata.codec,
-        fps: metadata.fps,
-        updatedAt: new Date(),
-      })
-      .where(eq(clips.id, clipId));
+    // Check if this is an image file (not a video)
+    const isImage = /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(clip.originalFilename);
 
-    // 3. Generate thumbnail
-    console.log(`[processClip] Generating thumbnail for ${clipId}`);
-    const thumbnailPath = getThumbnailPath(clipId);
-    await generateThumbnail(inputPath, thumbnailPath, metadata.duration);
-
-    // 4. Generate sprite sheet + WebVTT
-    console.log(`[processClip] Generating sprite sheet for ${clipId}`);
-    const spritePath = getSpriteSheetPath(clipId);
-    const vttPath = getWebVTTPath(clipId);
-    await generateSpriteSheet(inputPath, spritePath, vttPath, metadata.duration, metadata.width, metadata.height);
-
-    // 5. Generate AI scene analysis (name + description)
-    console.log(`[processClip] Analyzing scene for ${clipId}`);
     let clipName: string;
     let clipDescription: string | null = null;
     let clipShotType: string | null = null;
     let clipTags: string[] | null = null;
-    try {
-      const analysis = await generateClipName(inputPath, metadata.duration, clipId);
-      clipName = analysis.name;
-      clipDescription = analysis.description;
-      clipShotType = analysis.shotType;
-      clipTags = analysis.tags;
-    } catch (err) {
-      console.warn(
-        `[processClip] AI analysis failed for ${clipId}, using filename:`,
-        (err as Error).message
-      );
+    let thumbnailPath: string;
+    let spritePath: string;
+    let vttPath: string;
+
+    if (isImage) {
+      // For images: use the image itself as the thumbnail, skip video processing
+      console.log(`[processClip] ${clipId} is an image — using as thumbnail`);
+      const { execSync } = await import("child_process");
+
+      // Get image dimensions
+      let imgWidth = 0;
+      let imgHeight = 0;
+      try {
+        const identifyOut = execSync(
+          `ffprobe -v quiet -print_format json -show_streams "${inputPath}"`,
+          { encoding: "utf8" }
+        );
+        const probeData = JSON.parse(identifyOut);
+        const stream = probeData.streams?.[0];
+        if (stream) {
+          imgWidth = stream.width || 0;
+          imgHeight = stream.height || 0;
+        }
+      } catch { /* fallback to 0 */ }
+
+      await db
+        .update(clips)
+        .set({
+          duration: 0,
+          width: imgWidth,
+          height: imgHeight,
+          codec: "image",
+          fps: 0,
+          updatedAt: new Date(),
+        })
+        .where(eq(clips.id, clipId));
+
+      // Copy image as thumbnail (convert to jpg if needed)
+      thumbnailPath = getThumbnailPath(clipId);
+      try {
+        execSync(`ffmpeg -y -i "${inputPath}" -vf "scale='min(1280,iw)':'min(1280,ih)':force_original_aspect_ratio=decrease" -q:v 2 "${thumbnailPath}"`);
+      } catch {
+        // If ffmpeg fails, just copy the file
+        await fsPromises.copyFile(inputPath, thumbnailPath);
+      }
+
+      spritePath = getSpriteSheetPath(clipId);
+      vttPath = getWebVTTPath(clipId);
       clipName = clip.originalFilename.replace(/\.[^.]+$/, "");
+    } else {
+      // Video processing pipeline
+      // 2. Extract metadata
+      console.log(`[processClip] Extracting metadata for ${clipId}`);
+      const metadata = await extractMetadata(inputPath);
+      await db
+        .update(clips)
+        .set({
+          duration: metadata.duration,
+          width: metadata.width,
+          height: metadata.height,
+          codec: metadata.codec,
+          fps: metadata.fps,
+          updatedAt: new Date(),
+        })
+        .where(eq(clips.id, clipId));
+
+      // 3. Generate thumbnail
+      console.log(`[processClip] Generating thumbnail for ${clipId}`);
+      thumbnailPath = getThumbnailPath(clipId);
+      await generateThumbnail(inputPath, thumbnailPath, metadata.duration);
+
+      // 4. Generate sprite sheet + WebVTT
+      console.log(`[processClip] Generating sprite sheet for ${clipId}`);
+      spritePath = getSpriteSheetPath(clipId);
+      vttPath = getWebVTTPath(clipId);
+      await generateSpriteSheet(inputPath, spritePath, vttPath, metadata.duration, metadata.width, metadata.height);
+
+      // 5. Generate AI scene analysis (name + description)
+      console.log(`[processClip] Analyzing scene for ${clipId}`);
+      try {
+        const analysis = await generateClipName(inputPath, metadata.duration, clipId);
+        clipName = analysis.name;
+        clipDescription = analysis.description;
+        clipShotType = analysis.shotType;
+        clipTags = analysis.tags;
+      } catch (err) {
+        console.warn(
+          `[processClip] AI analysis failed for ${clipId}, using filename:`,
+          (err as Error).message
+        );
+        clipName = clip.originalFilename.replace(/\.[^.]+$/, "");
+      }
     }
 
     // 6. Handle Drive upload / cleanup
