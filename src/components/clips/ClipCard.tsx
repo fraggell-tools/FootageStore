@@ -71,7 +71,7 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
           const col = frameIndex % 8;
           const row = Math.floor(frameIndex / 8);
           return {
-            backgroundImage: `url(/api/assets/${clip.id}/sprite.jpg)`,
+            backgroundImage: `url(/api/assets/${clip.id}/sprite.jpg?v=2)`,
             backgroundSize: "800% 800%",
             backgroundPosition: `${(col / 7) * 100}% ${(row / 7) * 100}%`,
           };
