@@ -47,7 +47,6 @@ function FilterDropdown({
   options: [string, number][];
   selected: Set<string>;
   onToggle: (val: string) => void;
-  singleSelect?: boolean;
   accentColor?: "emerald";
 }) {
   const [open, setOpen] = useState(false);
@@ -63,7 +62,6 @@ function FilterDropdown({
 
   const activeCount = selected.size;
   const activeBg = accentColor === "emerald" ? "bg-emerald-500" : "bg-accent";
-  const activeHover = accentColor === "emerald" ? "hover:bg-emerald-600" : "hover:bg-accent-hover";
 
   return (
     <div className="relative" ref={ref}>
@@ -87,30 +85,12 @@ function FilterDropdown({
       </button>
       {open && (
         <div className="absolute top-full mt-1 left-0 z-30 bg-[#252525] border border-white/10 rounded-xl shadow-xl py-1.5 min-w-[180px] max-h-[320px] overflow-y-auto">
-          {singleSelect && (
-            <button
-              onClick={() => { onToggle(""); setOpen(false); }}
-              className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between ${
-                selected.size === 0 ? "text-white bg-white/5" : "text-neutral-400 hover:text-white hover:bg-white/5"
-              }`}
-            >
-              All
-              {selected.size === 0 && (
-                <svg className="w-3 h-3 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </button>
-          )}
           {options.map(([value, count]) => {
             const isActive = selected.has(value);
             return (
               <button
                 key={value}
-                onClick={() => {
-                  onToggle(value);
-                  if (singleSelect) setOpen(false);
-                }}
+                onClick={() => onToggle(value)}
                 className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between gap-3 ${
                   isActive ? "text-white bg-white/5" : "text-neutral-400 hover:text-white hover:bg-white/5"
                 }`}
@@ -147,7 +127,7 @@ export default function ClientDetailPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [clips, setClips] = useState<Clip[]>([]);
   const [search, setSearch] = useState("");
-  const [selectedShotType, setSelectedShotType] = useState<string | null>(null);
+  const [selectedShotTypes, setSelectedShotTypes] = useState<Set<string>>(new Set());
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -219,7 +199,7 @@ export default function ClientDetailPage() {
       const matchesSearch = (clip.name || clip.originalFilename || "")
         .toLowerCase()
         .includes(search.toLowerCase());
-      const matchesShotType = !selectedShotType || clip.shotType === selectedShotType;
+      const matchesShotType = selectedShotTypes.size === 0 || (clip.shotType && selectedShotTypes.has(clip.shotType));
       const matchesTags =
         selectedTags.size === 0 ||
         (clip.tags && Array.from(selectedTags).every((t) => clip.tags!.includes(t)));
@@ -228,7 +208,16 @@ export default function ClientDetailPage() {
         (clip.productSkus && Array.from(selectedSkus).every((s) => clip.productSkus!.includes(s)));
       return matchesSearch && matchesShotType && matchesTags && matchesSkus;
     });
-  }, [clips, search, selectedShotType, selectedTags, selectedSkus]);
+  }, [clips, search, selectedShotTypes, selectedTags, selectedSkus]);
+
+  const toggleShotType = useCallback((type: string) => {
+    setSelectedShotTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }, []);
 
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags((prev) => {
@@ -255,7 +244,7 @@ export default function ClientDetailPage() {
   }, []);
 
   const clearFilters = useCallback(() => {
-    setSelectedShotType(null);
+    setSelectedShotTypes(new Set());
     setSelectedTags(new Set());
     setSelectedSkus(new Set());
     setSearch("");
@@ -429,9 +418,8 @@ export default function ClientDetailPage() {
               <FilterDropdown
                 label="Shot"
                 options={shotTypes}
-                selected={selectedShotType ? new Set([selectedShotType]) : new Set()}
-                onToggle={(val) => setSelectedShotType(selectedShotType === val ? null : val)}
-                singleSelect
+                selected={selectedShotTypes}
+                onToggle={toggleShotType}
               />
             )}
 
@@ -457,11 +445,11 @@ export default function ClientDetailPage() {
             )}
 
             {/* Active filters & clear */}
-            {(selectedShotType || selectedTags.size > 0 || selectedSkus.size > 0) && (
+            {(selectedShotTypes.size > 0 || selectedTags.size > 0 || selectedSkus.size > 0) && (
               <>
                 <span className="text-xs text-muted ml-1">
                   {[
-                    selectedShotType && `Shot: ${selectedShotType}`,
+                    selectedShotTypes.size > 0 && `${selectedShotTypes.size} shot${selectedShotTypes.size > 1 ? "s" : ""}`,
                     selectedTags.size > 0 && `${selectedTags.size} tag${selectedTags.size > 1 ? "s" : ""}`,
                     selectedSkus.size > 0 && `${selectedSkus.size} SKU${selectedSkus.size > 1 ? "s" : ""}`,
                   ].filter(Boolean).join(" + ")}
@@ -481,7 +469,7 @@ export default function ClientDetailPage() {
       {filteredClips.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-muted">
-            {search || selectedShotType || selectedTags.size > 0 || selectedSkus.size > 0
+            {search || selectedShotTypes.size > 0 || selectedTags.size > 0 || selectedSkus.size > 0
               ? "No clips match your filters"
               : "No clips uploaded yet"}
           </p>
