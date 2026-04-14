@@ -30,6 +30,7 @@ interface Clip {
   hasThumbnail: boolean;
   hasSpriteSheet: boolean;
   shotType?: string | null;
+  tags?: string[] | null;
 }
 
 function formatBytes(bytes: number): string {
@@ -47,6 +48,7 @@ export default function ClientDetailPage() {
   const [clips, setClips] = useState<Clip[]>([]);
   const [search, setSearch] = useState("");
   const [selectedShotType, setSelectedShotType] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [selectedClip, setSelectedClip] = useState<Clip | null>(null);
 
@@ -80,8 +82,20 @@ export default function ClientDetailPage() {
         types.set(clip.shotType, (types.get(clip.shotType) || 0) + 1);
       }
     }
-    // Sort by count descending
     return Array.from(types.entries()).sort((a, b) => b[1] - a[1]);
+  }, [clips]);
+
+  // Get unique tags with counts
+  const allTags = useMemo(() => {
+    const tagMap = new Map<string, number>();
+    for (const clip of clips) {
+      if (clip.tags) {
+        for (const tag of clip.tags) {
+          tagMap.set(tag, (tagMap.get(tag) || 0) + 1);
+        }
+      }
+    }
+    return Array.from(tagMap.entries()).sort((a, b) => b[1] - a[1]);
   }, [clips]);
 
   const filteredClips = useMemo(() => {
@@ -90,9 +104,30 @@ export default function ClientDetailPage() {
         .toLowerCase()
         .includes(search.toLowerCase());
       const matchesShotType = !selectedShotType || clip.shotType === selectedShotType;
-      return matchesSearch && matchesShotType;
+      const matchesTags =
+        selectedTags.size === 0 ||
+        (clip.tags && Array.from(selectedTags).every((t) => clip.tags!.includes(t)));
+      return matchesSearch && matchesShotType && matchesTags;
     });
-  }, [clips, search, selectedShotType]);
+  }, [clips, search, selectedShotType, selectedTags]);
+
+  const toggleTag = useCallback((tag: string) => {
+    setSelectedTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) {
+        next.delete(tag);
+      } else {
+        next.add(tag);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setSelectedShotType(null);
+    setSelectedTags(new Set());
+    setSearch("");
+  }, []);
 
   const handleSelect = useCallback((clip: Clip) => {
     setSelectedClip(clip);
@@ -173,35 +208,72 @@ export default function ClientDetailPage() {
           </div>
         </div>
 
-        {/* Shot type filter chips */}
-        {shotTypes.length > 0 && (
-          <div className="flex items-center gap-2 mt-4 flex-wrap">
-            <button
-              onClick={() => setSelectedShotType(null)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                selectedShotType === null
-                  ? "bg-accent text-white"
-                  : "bg-surface border border-border text-neutral-400 hover:text-white hover:border-neutral-600"
-              }`}
-            >
-              All
-            </button>
-            {shotTypes.map(([type, count]) => (
+        {/* Filters */}
+        {(shotTypes.length > 0 || allTags.length > 0) && (
+          <div className="mt-4 space-y-3">
+            {/* Shot type row */}
+            {shotTypes.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] text-muted uppercase tracking-wider w-16 flex-shrink-0">Shot</span>
+                <button
+                  onClick={() => setSelectedShotType(null)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    selectedShotType === null
+                      ? "bg-accent text-white"
+                      : "bg-surface border border-border text-neutral-400 hover:text-white hover:border-neutral-600"
+                  }`}
+                >
+                  All
+                </button>
+                {shotTypes.map(([type, count]) => (
+                  <button
+                    key={type}
+                    onClick={() =>
+                      setSelectedShotType(selectedShotType === type ? null : type)
+                    }
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      selectedShotType === type
+                        ? "bg-accent text-white"
+                        : "bg-surface border border-border text-neutral-400 hover:text-white hover:border-neutral-600"
+                    }`}
+                  >
+                    {type}
+                    <span className="ml-1 opacity-60">{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Tags row */}
+            {allTags.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] text-muted uppercase tracking-wider w-16 flex-shrink-0">Tags</span>
+                {allTags.map(([tag, count]) => (
+                  <button
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      selectedTags.has(tag)
+                        ? "bg-accent text-white"
+                        : "bg-surface border border-border text-neutral-400 hover:text-white hover:border-neutral-600"
+                    }`}
+                  >
+                    {tag}
+                    <span className="ml-1 opacity-60">{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Active filter count & clear */}
+            {(selectedShotType || selectedTags.size > 0) && (
               <button
-                key={type}
-                onClick={() =>
-                  setSelectedShotType(selectedShotType === type ? null : type)
-                }
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  selectedShotType === type
-                    ? "bg-accent text-white"
-                    : "bg-surface border border-border text-neutral-400 hover:text-white hover:border-neutral-600"
-                }`}
+                onClick={clearFilters}
+                className="text-xs text-accent hover:text-accent-hover transition-colors"
               >
-                {type}
-                <span className="ml-1.5 opacity-60">{count}</span>
+                Clear filters
               </button>
-            ))}
+            )}
           </div>
         )}
       </div>
@@ -209,7 +281,7 @@ export default function ClientDetailPage() {
       {filteredClips.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-muted">
-            {search || selectedShotType
+            {search || selectedShotType || selectedTags.size > 0
               ? "No clips match your filters"
               : "No clips uploaded yet"}
           </p>

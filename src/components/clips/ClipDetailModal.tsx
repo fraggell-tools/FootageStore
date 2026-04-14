@@ -21,6 +21,7 @@ interface Clip {
   hasThumbnail: boolean;
   hasSpriteSheet: boolean;
   shotType?: string | null;
+  tags?: string[] | null;
   description?: string | null;
 }
 
@@ -158,17 +159,31 @@ export default function ClipDetailModal({ clip, onClose, onDelete }: ClipDetailM
 
           {/* Info side */}
           <div className={`${isPortrait ? "md:w-[50%]" : "md:w-[35%]"} p-5 flex flex-col gap-4 border-l border-white/5`}>
-            {/* Shot type badge & client/date */}
-            <div className="flex items-center gap-2 text-sm text-muted flex-wrap">
-              {clip.shotType && (
-                <span className="px-2 py-0.5 bg-accent/15 text-accent rounded-full text-xs font-medium">
-                  {clip.shotType}
-                </span>
-              )}
+            {/* Client & date */}
+            <div className="flex items-center gap-2 text-sm text-muted">
               <span className="text-accent">{clip.clientName}</span>
               <span className="text-white/20">&middot;</span>
               <span>{formatDate(dateStr)}</span>
             </div>
+
+            {/* Shot type & tags */}
+            {(clip.shotType || (clip.tags && clip.tags.length > 0)) && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {clip.shotType && (
+                  <span className="px-2 py-0.5 bg-accent/15 text-accent rounded-full text-xs font-medium">
+                    {clip.shotType}
+                  </span>
+                )}
+                {clip.tags?.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-2 py-0.5 bg-white/5 text-neutral-400 rounded-full text-xs"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Metadata box */}
             <div className="border border-white/10 rounded-xl p-4 space-y-3">

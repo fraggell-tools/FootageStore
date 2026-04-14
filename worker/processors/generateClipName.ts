@@ -9,16 +9,17 @@ const anthropic = new Anthropic();
 const FRAME_COUNT = 12;
 
 const SHOT_TYPES = [
-  "UGC",
-  "Product Demo",
-  "Testimonial",
-  "Lifestyle",
-  "B-Roll",
-  "Unboxing",
-  "Tutorial",
-  "Before & After",
-  "Talking Head",
-  "Product Close-Up",
+  "Close-Up",
+  "Extreme Close-Up",
+  "Medium",
+  "Wide",
+  "Full Body",
+  "Over the Shoulder",
+  "POV",
+  "Top Down",
+  "Low Angle",
+  "High Angle",
+  "Tracking",
   "Other",
 ] as const;
 
@@ -26,6 +27,7 @@ interface SceneAnalysis {
   name: string;
   description: string;
   shotType: string;
+  tags: string[];
 }
 
 export async function generateClipName(
@@ -93,20 +95,32 @@ Respond in EXACTLY this format:
 
 TITLE: [3-8 word descriptive title]
 SHOT_TYPE: [exactly one of: ${SHOT_TYPES.join(", ")}]
+TAGS: [comma-separated tags from the categories below]
 DESCRIPTION: [Detailed paragraph describing the scene]
 
-For SHOT_TYPE, pick the single best match:
-- UGC: Casual, phone-filmed, authentic user content
-- Product Demo: Showing how a product works or its features
-- Testimonial: Someone speaking about their experience
-- Lifestyle: Product in real-world context, aspirational
-- B-Roll: Supplementary/atmospheric footage, no main action
-- Unboxing: Opening or revealing a product/package
-- Tutorial: Step-by-step instructions or how-to
-- Before & After: Showing transformation or comparison
-- Talking Head: Person speaking directly to camera
-- Product Close-Up: Tight shots focused on product details
+For SHOT_TYPE, classify the PRIMARY camera framing. Pick one:
+- Close-Up: Head/face or product fills most of the frame
+- Extreme Close-Up: Very tight on details (eyes, texture, small product parts)
+- Medium: Waist-up framing of a person, or mid-distance product shot
+- Wide: Full scene visible, environment prominent, subject smaller in frame
+- Full Body: Entire person visible head to toe
+- Over the Shoulder: Shot from behind/beside one person looking at another or at product
+- POV: First-person perspective, as if viewer is doing the action
+- Top Down: Camera looking straight down from above (flat lay, overhead)
+- Low Angle: Camera shooting upward at the subject
+- High Angle: Camera shooting downward at the subject
+- Tracking: Camera physically moves to follow the subject
 - Other: Doesn't fit any category above
+
+For TAGS, select ALL that apply from these categories:
+
+Subject: Man, Woman, Couple, Group, Hands Only, No People
+Action: Talking Head, Holding Product, Applying Product, Unboxing, Demonstrating, Eating/Drinking, Exercising, Walking, Sitting, Dancing
+Content Style: UGC, Professional, Testimonial, Product Demo, Lifestyle, B-Roll, Tutorial, Before & After, ASMR, Transition
+Setting: Studio, Outdoor, Kitchen, Bathroom, Bedroom, Living Room, Gym, Office, Car, Restaurant
+Mood: Bright, Moody, Natural Light, Studio Lit, Warm, Cool, Dark
+
+Only include tags that clearly apply. Use the exact tag names above.
 
 For the DESCRIPTION, include:
 - What subjects/people are doing (actions, movements, gestures)
@@ -131,17 +145,21 @@ Write naturally — this description will be used for search, so use the kind of
     // Parse the response
     const titleMatch = text.match(/TITLE:\s*(.+)/i);
     const shotTypeMatch = text.match(/SHOT_TYPE:\s*(.+)/i);
+    const tagsMatch = text.match(/TAGS:\s*(.+)/i);
     const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+)/i);
 
     const name = titleMatch?.[1]?.trim() ?? "Untitled Clip";
     const rawShotType = shotTypeMatch?.[1]?.trim() ?? "Other";
-    // Validate against known shot types
     const shotType = SHOT_TYPES.find(
       (t) => t.toLowerCase() === rawShotType.toLowerCase()
     ) ?? "Other";
+    const tags = tagsMatch?.[1]
+      ?.split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0) ?? [];
     const description = descMatch?.[1]?.trim() ?? text;
 
-    return { name, description, shotType };
+    return { name, description, shotType, tags };
   } finally {
     // Clean up temp files
     for (const fp of framePaths) {

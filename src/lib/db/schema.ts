@@ -8,6 +8,7 @@ import {
   timestamp,
   real,
   pgEnum,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("user_role", ["admin", "editor"]);
@@ -56,7 +57,8 @@ export const clips = pgTable("clips", {
   spriteSheetPath: text("sprite_sheet_path"),
   webvttPath: text("webvtt_path"),
   originalPath: text("original_path").notNull(),
-  shotType: varchar("shot_type", { length: 50 }), // AI-classified shot type for filtering
+  shotType: varchar("shot_type", { length: 50 }), // AI-classified camera framing
+  tags: jsonb("tags").$type<string[]>(), // AI-generated tags for filtering (JSON array)
   driveFileId: varchar("drive_file_id", { length: 255 }),
   uploadedBy: uuid("uploaded_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),

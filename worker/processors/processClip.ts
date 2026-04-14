@@ -101,11 +101,13 @@ export async function processClip(data: JobData): Promise<void> {
     let clipName: string;
     let clipDescription: string | null = null;
     let clipShotType: string | null = null;
+    let clipTags: string[] | null = null;
     try {
       const analysis = await generateClipName(inputPath, metadata.duration, clipId);
       clipName = analysis.name;
       clipDescription = analysis.description;
       clipShotType = analysis.shotType;
+      clipTags = analysis.tags;
     } catch (err) {
       console.warn(
         `[processClip] AI analysis failed for ${clipId}, using filename:`,
@@ -157,6 +159,7 @@ export async function processClip(data: JobData): Promise<void> {
         name: clipName,
         description: clipDescription,
         shotType: clipShotType,
+        tags: clipTags,
         thumbnailPath,
         spriteSheetPath: spritePath,
         webvttPath: vttPath,
