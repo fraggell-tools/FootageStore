@@ -19,15 +19,6 @@ const navItems = [
 
 const adminItems = [
   {
-    href: "/admin/upload",
-    label: "Upload",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-      </svg>
-    ),
-  },
-  {
     href: "/admin/clients",
     label: "Manage Clients",
     icon: (
@@ -54,6 +45,8 @@ export default function Sidebar() {
   const isAdmin = session?.user?.role === "admin";
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,6 +129,41 @@ export default function Sidebar() {
                 {item.label}
               </Link>
             ))}
+            <button
+              onClick={async () => {
+                setSyncing(true);
+                setSyncResult(null);
+                try {
+                  const res = await fetch("/api/sync", { method: "POST" });
+                  const data = await res.json();
+                  const parts = [];
+                  if (data.clientsCreated) parts.push(`+${data.clientsCreated} clients`);
+                  if (data.clipsCreated) parts.push(`+${data.clipsCreated} clips`);
+                  if (data.clientsRemoved) parts.push(`-${data.clientsRemoved} clients`);
+                  if (data.clipsRemoved) parts.push(`-${data.clipsRemoved} clips`);
+                  setSyncResult(parts.length > 0 ? parts.join(", ") : "Up to date");
+                  if (parts.length > 0) {
+                    window.location.reload();
+                  }
+                  setTimeout(() => setSyncResult(null), 4000);
+                } catch {
+                  setSyncResult("Sync failed");
+                  setTimeout(() => setSyncResult(null), 4000);
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              disabled={syncing}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-neutral-400 hover:text-white hover:bg-surface-hover w-full disabled:opacity-50"
+            >
+              <svg className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {syncing ? "Syncing..." : "Sync Drive"}
+            </button>
+            {syncResult && (
+              <p className="px-3 text-xs text-accent">{syncResult}</p>
+            )}
           </>
         )}
       </nav>

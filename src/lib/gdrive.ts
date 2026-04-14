@@ -194,3 +194,81 @@ export async function getDriveFileSize(fileId: string): Promise<number> {
   });
   return parseInt(res.data.size || "0", 10);
 }
+
+export interface DriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  createdTime: string;
+}
+
+/**
+ * List all subfolders inside the parent "Footage Storage" folder.
+ */
+export async function listClientFolders(): Promise<DriveFile[]> {
+  const drive = getDrive();
+  const parentId = getParentFolderId();
+
+  const folders: DriveFile[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const res = await drive.files.list({
+      q: `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: "nextPageToken, files(id, name, mimeType, createdTime)",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      pageSize: 100,
+      pageToken,
+    });
+
+    for (const f of res.data.files || []) {
+      folders.push({
+        id: f.id!,
+        name: f.name!,
+        mimeType: f.mimeType!,
+        size: 0,
+        createdTime: f.createdTime!,
+      });
+    }
+
+    pageToken = res.data.nextPageToken || undefined;
+  } while (pageToken);
+
+  return folders;
+}
+
+/**
+ * List all video files inside a specific folder.
+ */
+export async function listFilesInFolder(folderId: string): Promise<DriveFile[]> {
+  const drive = getDrive();
+  const files: DriveFile[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const res = await drive.files.list({
+      q: `'${folderId}' in parents and trashed = false and (mimeType contains 'video/' or mimeType = 'application/octet-stream')`,
+      fields: "nextPageToken, files(id, name, mimeType, size, createdTime)",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      pageSize: 100,
+      pageToken,
+    });
+
+    for (const f of res.data.files || []) {
+      files.push({
+        id: f.id!,
+        name: f.name!,
+        mimeType: f.mimeType!,
+        size: parseInt(f.size || "0", 10),
+        createdTime: f.createdTime!,
+      });
+    }
+
+    pageToken = res.data.nextPageToken || undefined;
+  } while (pageToken);
+
+  return files;
+}

@@ -29,3 +29,8 @@ worker.on("error", (err) => {
 });
 
 console.log("[Worker] Listening for jobs on queue: clip-processing");
+
+// Start Google Drive sync (runs every 3 minutes)
+import("./syncDrive").catch((err) => {
+  console.error("[Worker] Failed to start Drive sync:", err.message);
+});
