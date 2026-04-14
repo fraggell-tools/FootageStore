@@ -51,6 +51,7 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
   const hasThumbnail = clip.hasThumbnail || !!clip.thumbnailPath;
   const hasSpriteSheet = clip.hasSpriteSheet || !!clip.spriteSheetPath;
   const isProcessing = clip.status === "processing" || clip.status === "uploading";
+  const isPortrait = clip.height > clip.width;
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!containerRef.current) return;
@@ -80,19 +81,13 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
 
   return (
     <div
-      className="clip-card bg-surface border border-border rounded-xl overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors group"
+      className="clip-card bg-surface border border-border rounded-xl overflow-hidden cursor-pointer hover:border-neutral-600 transition-all group hover:shadow-lg hover:shadow-black/20"
       onClick={() => onSelect(clip)}
     >
-      {/* Thumbnail area — natural aspect ratio per clip */}
+      {/* Thumbnail area — fixed 16:9 for all clips */}
       <div
         ref={containerRef}
-        className="relative overflow-hidden"
-        style={{
-          aspectRatio:
-            clip.width && clip.height
-              ? `${clip.width}/${clip.height}`
-              : "16/9",
-        }}
+        className="relative overflow-hidden aspect-video"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
@@ -101,11 +96,15 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
           <img
             src={`/api/assets/${clip.id}/thumbnail.jpg`}
             alt={clip.name || clip.originalFilename}
-            className="absolute inset-0 w-full h-full object-cover"
+            className={`absolute inset-0 w-full h-full ${isPortrait ? "object-contain bg-black" : "object-cover"}`}
             loading="lazy"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-900" />
+          <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center">
+            <svg className="w-8 h-8 text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </div>
         )}
 
         {/* Sprite sheet overlay on hover */}
@@ -119,6 +118,15 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
             className="absolute bottom-0 left-0 h-[3px] bg-accent z-10"
             style={{ width: `${skimPercent * 100}%` }}
           />
+        )}
+
+        {/* Portrait badge */}
+        {isPortrait && (
+          <div className="absolute top-2 left-2 z-10">
+            <span className="px-1.5 py-0.5 bg-black/60 backdrop-blur-sm rounded text-[10px] text-white/70 font-medium">
+              9:16
+            </span>
+          </div>
         )}
 
         {/* Duration badge */}

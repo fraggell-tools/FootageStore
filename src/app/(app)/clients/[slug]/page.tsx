@@ -31,6 +31,7 @@ interface Clip {
   hasSpriteSheet: boolean;
   shotType?: string | null;
   tags?: string[] | null;
+  productSkus?: string[] | null;
 }
 
 function formatBytes(bytes: number): string {
@@ -49,6 +50,7 @@ export default function ClientDetailPage() {
   const [search, setSearch] = useState("");
   const [selectedShotType, setSelectedShotType] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [selectedClip, setSelectedClip] = useState<Clip | null>(null);
 
@@ -98,6 +100,19 @@ export default function ClientDetailPage() {
     return Array.from(tagMap.entries()).sort((a, b) => b[1] - a[1]);
   }, [clips]);
 
+  // Get unique product SKUs with counts
+  const allSkus = useMemo(() => {
+    const skuMap = new Map<string, number>();
+    for (const clip of clips) {
+      if (clip.productSkus) {
+        for (const sku of clip.productSkus) {
+          skuMap.set(sku, (skuMap.get(sku) || 0) + 1);
+        }
+      }
+    }
+    return Array.from(skuMap.entries()).sort((a, b) => b[1] - a[1]);
+  }, [clips]);
+
   const filteredClips = useMemo(() => {
     return clips.filter((clip) => {
       const matchesSearch = (clip.name || clip.originalFilename || "")
@@ -107,9 +122,12 @@ export default function ClientDetailPage() {
       const matchesTags =
         selectedTags.size === 0 ||
         (clip.tags && Array.from(selectedTags).every((t) => clip.tags!.includes(t)));
-      return matchesSearch && matchesShotType && matchesTags;
+      const matchesSkus =
+        selectedSkus.size === 0 ||
+        (clip.productSkus && Array.from(selectedSkus).every((s) => clip.productSkus!.includes(s)));
+      return matchesSearch && matchesShotType && matchesTags && matchesSkus;
     });
-  }, [clips, search, selectedShotType, selectedTags]);
+  }, [clips, search, selectedShotType, selectedTags, selectedSkus]);
 
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags((prev) => {
@@ -123,9 +141,22 @@ export default function ClientDetailPage() {
     });
   }, []);
 
+  const toggleSku = useCallback((sku: string) => {
+    setSelectedSkus((prev) => {
+      const next = new Set(prev);
+      if (next.has(sku)) {
+        next.delete(sku);
+      } else {
+        next.add(sku);
+      }
+      return next;
+    });
+  }, []);
+
   const clearFilters = useCallback(() => {
     setSelectedShotType(null);
     setSelectedTags(new Set());
+    setSelectedSkus(new Set());
     setSearch("");
   }, []);
 
@@ -209,7 +240,7 @@ export default function ClientDetailPage() {
         </div>
 
         {/* Filters */}
-        {(shotTypes.length > 0 || allTags.length > 0) && (
+        {(shotTypes.length > 0 || allTags.length > 0 || allSkus.length > 0) && (
           <div className="mt-4 space-y-3">
             {/* Shot type row */}
             {shotTypes.length > 0 && (
@@ -265,8 +296,29 @@ export default function ClientDetailPage() {
               </div>
             )}
 
+            {/* SKUs row */}
+            {allSkus.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] text-muted uppercase tracking-wider w-16 flex-shrink-0">SKU</span>
+                {allSkus.map(([sku, count]) => (
+                  <button
+                    key={sku}
+                    onClick={() => toggleSku(sku)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      selectedSkus.has(sku)
+                        ? "bg-emerald-500 text-white"
+                        : "bg-surface border border-border text-neutral-400 hover:text-white hover:border-neutral-600"
+                    }`}
+                  >
+                    {sku}
+                    <span className="ml-1 opacity-60">{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Active filter count & clear */}
-            {(selectedShotType || selectedTags.size > 0) && (
+            {(selectedShotType || selectedTags.size > 0 || selectedSkus.size > 0) && (
               <button
                 onClick={clearFilters}
                 className="text-xs text-accent hover:text-accent-hover transition-colors"
@@ -281,7 +333,7 @@ export default function ClientDetailPage() {
       {filteredClips.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-muted">
-            {search || selectedShotType || selectedTags.size > 0
+            {search || selectedShotType || selectedTags.size > 0 || selectedSkus.size > 0
               ? "No clips match your filters"
               : "No clips uploaded yet"}
           </p>

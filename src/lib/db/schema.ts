@@ -59,6 +59,7 @@ export const clips = pgTable("clips", {
   originalPath: text("original_path").notNull(),
   shotType: varchar("shot_type", { length: 50 }), // AI-classified camera framing
   tags: jsonb("tags").$type<string[]>(), // AI-generated tags for filtering (JSON array)
+  productSkus: jsonb("product_skus").$type<string[]>(), // Manually assigned product SKUs
   driveFileId: varchar("drive_file_id", { length: 255 }),
   uploadedBy: uuid("uploaded_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),

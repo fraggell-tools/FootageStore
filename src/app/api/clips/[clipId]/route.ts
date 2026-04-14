@@ -52,6 +52,9 @@ export async function PATCH(
   if (body.tags !== undefined) {
     updates.tags = Array.isArray(body.tags) ? body.tags : null;
   }
+  if (body.productSkus !== undefined) {
+    updates.productSkus = Array.isArray(body.productSkus) ? body.productSkus : null;
+  }
 
   if (Object.keys(updates).length <= 1) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
