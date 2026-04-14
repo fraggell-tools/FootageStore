@@ -27,6 +27,9 @@ interface Clip {
 interface ClipCardProps {
   clip: Clip;
   onSelect: (clip: Clip) => void;
+  isSelected?: boolean;
+  onToggleSelect?: (clipId: string) => void;
+  bulkMode?: boolean;
 }
 
 function formatDuration(seconds: number): string {
@@ -44,7 +47,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-export default function ClipCard({ clip, onSelect }: ClipCardProps) {
+export default function ClipCard({ clip, onSelect, isSelected, onToggleSelect, bulkMode }: ClipCardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [skimPercent, setSkimPercent] = useState<number | null>(null);
 
@@ -81,8 +84,10 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
 
   return (
     <div
-      className="clip-card bg-surface border border-border rounded-xl overflow-hidden cursor-pointer hover:border-neutral-600 transition-all group hover:shadow-lg hover:shadow-black/20"
-      onClick={() => onSelect(clip)}
+      className={`clip-card bg-surface border rounded-xl overflow-hidden cursor-pointer transition-all group hover:shadow-lg hover:shadow-black/20 ${
+        isSelected ? "border-accent ring-2 ring-accent/30" : "border-border hover:border-neutral-600"
+      }`}
+      onClick={() => bulkMode && onToggleSelect ? onToggleSelect(clip.id) : onSelect(clip)}
     >
       {/* Thumbnail area — natural aspect ratio */}
       <div
@@ -92,6 +97,22 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
+        {/* Selection checkbox */}
+        {onToggleSelect && (
+          <div
+            className={`absolute top-2 left-2 z-20 w-5 h-5 rounded border-2 flex items-center justify-center cursor-pointer transition-all ${
+              isSelected ? "bg-accent border-accent" : "bg-black/40 border-white/40 hover:border-white/70"
+            } ${bulkMode ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+            onClick={(e) => { e.stopPropagation(); onToggleSelect(clip.id); }}
+          >
+            {isSelected && (
+              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </div>
+        )}
+
         {/* Base thumbnail or gradient placeholder */}
         {hasThumbnail ? (
           <img

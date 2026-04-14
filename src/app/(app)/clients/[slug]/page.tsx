@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import ClipGrid from "@/components/clips/ClipGrid";
 import ClipDetailModal from "@/components/clips/ClipDetailModal";
+import BulkActionBar from "@/components/clips/BulkActionBar";
 
 interface Client {
   id: string;
@@ -53,6 +54,8 @@ export default function ClientDetailPage() {
   const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [selectedClip, setSelectedClip] = useState<Clip | null>(null);
+  const [selectedClipIds, setSelectedClipIds] = useState<Set<string>>(new Set());
+  const bulkMode = selectedClipIds.size > 0;
 
   useEffect(() => {
     async function fetchData() {
@@ -163,6 +166,87 @@ export default function ClientDetailPage() {
   const handleSelect = useCallback((clip: Clip) => {
     setSelectedClip(clip);
   }, []);
+
+  const toggleClipSelection = useCallback((clipId: string) => {
+    setSelectedClipIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clipId)) next.delete(clipId);
+      else next.add(clipId);
+      return next;
+    });
+  }, []);
+
+  const selectAllVisible = useCallback(() => {
+    setSelectedClipIds(new Set(filteredClips.map((c) => c.id)));
+  }, [filteredClips]);
+
+  const deselectAll = useCallback(() => {
+    setSelectedClipIds(new Set());
+  }, []);
+
+  const handleBulkAddTags = useCallback(async (tags: string[]) => {
+    const clipIds = Array.from(selectedClipIds);
+    const res = await fetch("/api/clips/bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clipIds, action: "addTags", value: tags }),
+    });
+    if (res.ok) {
+      const { updatedClips } = await res.json();
+      setClips((prev) =>
+        prev.map((c) => {
+          const u = updatedClips.find((x: Clip) => x.id === c.id);
+          return u ? { ...c, tags: u.tags } : c;
+        })
+      );
+    }
+  }, [selectedClipIds]);
+
+  const handleBulkAddSkus = useCallback(async (skus: string[]) => {
+    const clipIds = Array.from(selectedClipIds);
+    const res = await fetch("/api/clips/bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clipIds, action: "addSkus", value: skus }),
+    });
+    if (res.ok) {
+      const { updatedClips } = await res.json();
+      setClips((prev) =>
+        prev.map((c) => {
+          const u = updatedClips.find((x: Clip) => x.id === c.id);
+          return u ? { ...c, productSkus: u.product_skus } : c;
+        })
+      );
+    }
+  }, [selectedClipIds]);
+
+  const handleBulkSetShotType = useCallback(async (shotType: string) => {
+    const clipIds = Array.from(selectedClipIds);
+    const res = await fetch("/api/clips/bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clipIds, action: "setShotType", value: shotType }),
+    });
+    if (res.ok) {
+      setClips((prev) =>
+        prev.map((c) => selectedClipIds.has(c.id) ? { ...c, shotType } : c)
+      );
+    }
+  }, [selectedClipIds]);
+
+  const handleBulkDownload = useCallback(() => {
+    const ids = Array.from(selectedClipIds);
+    ids.forEach((id, i) => {
+      setTimeout(() => {
+        const a = document.createElement("a");
+        a.href = `/api/clips/${id}/download`;
+        a.download = "";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, i * 300);
+    });
+  }, [selectedClipIds]);
 
   if (loading) {
     return (
@@ -339,7 +423,28 @@ export default function ClientDetailPage() {
           </p>
         </div>
       ) : (
-        <ClipGrid clips={filteredClips} onSelect={handleSelect} />
+        <div className={bulkMode ? "pb-20" : ""}>
+          <ClipGrid
+            clips={filteredClips}
+            onSelect={handleSelect}
+            selectedIds={selectedClipIds}
+            onToggleSelect={toggleClipSelection}
+            bulkMode={bulkMode}
+          />
+        </div>
+      )}
+
+      {bulkMode && (
+        <BulkActionBar
+          selectedCount={selectedClipIds.size}
+          totalVisible={filteredClips.length}
+          onSelectAll={selectAllVisible}
+          onDeselectAll={deselectAll}
+          onBulkAddTags={handleBulkAddTags}
+          onBulkAddSkus={handleBulkAddSkus}
+          onBulkSetShotType={handleBulkSetShotType}
+          onBulkDownload={handleBulkDownload}
+        />
       )}
 
       {selectedClip && (

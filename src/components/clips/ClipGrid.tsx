@@ -22,14 +22,23 @@ interface Clip {
 interface ClipGridProps {
   clips: Clip[];
   onSelect: (clip: Clip) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (clipId: string) => void;
+  bulkMode?: boolean;
 }
 
-export default function ClipGrid({ clips, onSelect }: ClipGridProps) {
+export default function ClipGrid({ clips, onSelect, selectedIds, onToggleSelect, bulkMode }: ClipGridProps) {
   return (
     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
       {clips.map((clip) => (
         <div key={clip.id} className="mb-4 break-inside-avoid">
-          <ClipCard clip={clip} onSelect={onSelect} />
+          <ClipCard
+            clip={clip}
+            onSelect={onSelect}
+            isSelected={selectedIds?.has(clip.id)}
+            onToggleSelect={onToggleSelect}
+            bulkMode={bulkMode}
+          />
         </div>
       ))}
     </div>
