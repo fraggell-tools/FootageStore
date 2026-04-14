@@ -28,7 +28,7 @@ export default function UploadPage() {
     fetch("/api/clients")
       .then((res) => res.json())
       .then((data) => {
-        const list = data.clients || [];
+        const list = Array.isArray(data) ? data : data.clients || [];
         setClients(list);
         if (list.length > 0 && !selectedClientId) {
           setSelectedClientId(list[0].id);
