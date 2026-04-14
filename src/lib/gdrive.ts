@@ -240,7 +240,7 @@ export async function listClientFolders(): Promise<DriveFile[]> {
 }
 
 /**
- * List all video files inside a specific folder.
+ * List all files (excluding subfolders) inside a specific folder.
  */
 export async function listFilesInFolder(folderId: string): Promise<DriveFile[]> {
   const drive = getDrive();
@@ -249,7 +249,7 @@ export async function listFilesInFolder(folderId: string): Promise<DriveFile[]> 
 
   do {
     const res = await drive.files.list({
-      q: `'${folderId}' in parents and trashed = false and (mimeType contains 'video/' or mimeType = 'application/octet-stream')`,
+      q: `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
       fields: "nextPageToken, files(id, name, mimeType, size, createdTime)",
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
