@@ -15,7 +15,7 @@ export async function generateThumbnail(
     ffmpeg(inputPath)
       .seekInput(seekTime)
       .frames(1)
-      .outputOptions(["-vf", "scale=640:-1"])
+      .outputOptions(["-vf", "scale=1280:-1", "-q:v", "2"])
       .output(outputPath)
       .on("end", () => resolve())
       .on("error", (err) =>
