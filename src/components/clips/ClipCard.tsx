@@ -84,11 +84,11 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
       className="clip-card bg-surface border border-border rounded-xl overflow-hidden cursor-pointer hover:border-neutral-600 transition-all group hover:shadow-lg hover:shadow-black/20"
       onClick={() => onSelect(clip)}
     >
-      {/* Thumbnail area — 4:5 works for both portrait and landscape */}
+      {/* Thumbnail area — natural aspect ratio */}
       <div
         ref={containerRef}
         className="relative overflow-hidden"
-        style={{ aspectRatio: "4/5" }}
+        style={{ aspectRatio: clip.width && clip.height ? `${clip.width}/${clip.height}` : "16/9" }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >

@@ -26,9 +26,11 @@ interface ClipGridProps {
 
 export default function ClipGrid({ clips, onSelect }: ClipGridProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
       {clips.map((clip) => (
-        <ClipCard key={clip.id} clip={clip} onSelect={onSelect} />
+        <div key={clip.id} className="mb-4 break-inside-avoid">
+          <ClipCard clip={clip} onSelect={onSelect} />
+        </div>
       ))}
     </div>
   );
