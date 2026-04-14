@@ -126,7 +126,7 @@ export default function ClipDetailModal({ clip, onClose, onDelete }: ClipDetailM
         {/* Main content: video left, info right */}
         <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto">
           {/* Video side */}
-          <div className={`flex-1 bg-black flex items-center justify-center min-h-[300px] ${isPortrait ? "md:max-w-[50%]" : "md:max-w-[65%]"}`}>
+          <div className={`flex-1 bg-black flex items-center justify-center min-h-[300px] p-4 ${isPortrait ? "md:max-w-[50%]" : "md:max-w-[65%]"}`}>
             <div
               className="relative w-full h-full cursor-pointer flex items-center justify-center"
               onClick={togglePlay}
