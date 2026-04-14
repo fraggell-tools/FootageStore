@@ -27,13 +27,12 @@ interface ClipGridProps {
 export default function ClipGrid({ clips, onSelect }: ClipGridProps) {
   return (
     <div
-      className="grid gap-4"
-      style={{
-        gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-      }}
+      className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4"
     >
       {clips.map((clip) => (
-        <ClipCard key={clip.id} clip={clip} onSelect={onSelect} />
+        <div key={clip.id} className="mb-4 break-inside-avoid">
+          <ClipCard clip={clip} onSelect={onSelect} />
+        </div>
       ))}
     </div>
   );

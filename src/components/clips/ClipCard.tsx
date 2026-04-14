@@ -83,11 +83,16 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
       className="clip-card bg-surface border border-border rounded-xl overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors group"
       onClick={() => onSelect(clip)}
     >
-      {/* Thumbnail area — uniform 16:9 container for all clips */}
+      {/* Thumbnail area — natural aspect ratio per clip */}
       <div
         ref={containerRef}
-        className="relative overflow-hidden bg-black"
-        style={{ aspectRatio: "16/9" }}
+        className="relative overflow-hidden"
+        style={{
+          aspectRatio:
+            clip.width && clip.height
+              ? `${clip.width}/${clip.height}`
+              : "16/9",
+        }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
@@ -96,7 +101,7 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
           <img
             src={`/api/assets/${clip.id}/thumbnail.jpg`}
             alt={clip.name || clip.originalFilename}
-            className="absolute inset-0 w-full h-full object-contain"
+            className="absolute inset-0 w-full h-full object-cover"
             loading="lazy"
           />
         ) : (
@@ -105,7 +110,7 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
 
         {/* Sprite sheet overlay on hover */}
         {spriteStyle && (
-          <div className="absolute inset-0 bg-black" style={spriteStyle} />
+          <div className="absolute inset-0" style={spriteStyle} />
         )}
 
         {/* Skim progress bar */}
@@ -116,19 +121,14 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
           />
         )}
 
-        {/* Duration & orientation badges */}
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
-          {clip.width > 0 && clip.height > 0 && clip.height > clip.width && (
-            <span className="px-1.5 py-0.5 bg-black/60 backdrop-blur-sm rounded text-xs text-white/80">
-              9:16
-            </span>
-          )}
-          {clip.duration > 0 && (
+        {/* Duration badge */}
+        {clip.duration > 0 && (
+          <div className="absolute top-2 right-2 z-10">
             <span className="px-1.5 py-0.5 bg-black/60 backdrop-blur-sm rounded text-xs text-white/80">
               {formatDuration(clip.duration)}
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Processing indicator */}
         {isProcessing && (
