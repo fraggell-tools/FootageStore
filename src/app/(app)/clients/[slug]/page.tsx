@@ -16,7 +16,7 @@ interface Client {
 
 interface Clip {
   id: string;
-  name: string;
+  name: string | null;
   clientId: string;
   clientName: string;
   duration: number;
@@ -71,7 +71,7 @@ export default function ClientDetailPage() {
   }, [slug]);
 
   const filteredClips = clips.filter((clip) =>
-    clip.name.toLowerCase().includes(search.toLowerCase())
+    (clip.name || clip.originalFilename || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const handleSelect = useCallback((clip: Clip) => {

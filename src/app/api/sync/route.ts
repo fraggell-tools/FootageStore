@@ -3,10 +3,18 @@ import { auth } from "@/lib/auth";
 import { syncFromDrive } from "@/lib/sync";
 
 export async function POST() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  try {
+    const session = await auth();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const result = await syncFromDrive();
-  return NextResponse.json(result);
+    const result = await syncFromDrive();
+    return NextResponse.json(result);
+  } catch (err) {
+    console.error("[Sync API] Error:", err);
+    return NextResponse.json(
+      { error: "Sync failed", message: (err as Error).message },
+      { status: 500 }
+    );
+  }
 }
