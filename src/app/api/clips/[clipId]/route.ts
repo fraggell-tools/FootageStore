@@ -40,15 +40,26 @@ export async function PATCH(
 
   const { clipId } = await params;
   const body = await request.json();
-  const { name } = body;
 
-  if (!name || typeof name !== "string") {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+
+  if (body.name !== undefined) {
+    updates.name = body.name;
+  }
+  if (body.shotType !== undefined) {
+    updates.shotType = body.shotType || null;
+  }
+  if (body.tags !== undefined) {
+    updates.tags = Array.isArray(body.tags) ? body.tags : null;
+  }
+
+  if (Object.keys(updates).length <= 1) {
+    return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
   const [updated] = await db
     .update(clips)
-    .set({ name, updatedAt: new Date() })
+    .set(updates)
     .where(eq(clips.id, clipId))
     .returning();
 

@@ -298,6 +298,12 @@ export default function ClientDetailPage() {
             setClips((prev) => prev.filter((c) => c.id !== clipId));
             setSelectedClip(null);
           }}
+          onUpdate={(clipId, updates) => {
+            setClips((prev) =>
+              prev.map((c) => (c.id === clipId ? { ...c, ...updates } : c))
+            );
+            setSelectedClip((prev) => prev ? { ...prev, ...updates } : prev);
+          }}
         />
       )}
     </div>

@@ -29,6 +29,7 @@ interface ClipDetailModalProps {
   clip: Clip;
   onClose: () => void;
   onDelete?: (clipId: string) => void;
+  onUpdate?: (clipId: string, updates: Partial<Clip>) => void;
 }
 
 function formatDuration(seconds: number): string {
@@ -57,13 +58,56 @@ function formatDate(dateStr: string | undefined): string {
   });
 }
 
-export default function ClipDetailModal({ clip, onClose, onDelete }: ClipDetailModalProps) {
+export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate }: ClipDetailModalProps) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [newTag, setNewTag] = useState("");
+  const [localTags, setLocalTags] = useState<string[]>(clip.tags || []);
+  const [localShotType, setLocalShotType] = useState<string>(clip.shotType || "");
+
+  const saveTags = useCallback(async (tags: string[]) => {
+    setLocalTags(tags);
+    try {
+      const res = await fetch(`/api/clips/${clip.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags }),
+      });
+      if (res.ok && onUpdate) {
+        onUpdate(clip.id, { tags });
+      }
+    } catch {}
+  }, [clip.id, onUpdate]);
+
+  const saveShotType = useCallback(async (shotType: string) => {
+    setLocalShotType(shotType);
+    try {
+      const res = await fetch(`/api/clips/${clip.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shotType }),
+      });
+      if (res.ok && onUpdate) {
+        onUpdate(clip.id, { shotType });
+      }
+    } catch {}
+  }, [clip.id, onUpdate]);
+
+  const addTag = useCallback(() => {
+    const tag = newTag.trim();
+    if (tag && !localTags.includes(tag)) {
+      saveTags([...localTags, tag]);
+    }
+    setNewTag("");
+  }, [newTag, localTags, saveTags]);
+
+  const removeTag = useCallback((tag: string) => {
+    saveTags(localTags.filter((t) => t !== tag));
+  }, [localTags, saveTags]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -166,24 +210,60 @@ export default function ClipDetailModal({ clip, onClose, onDelete }: ClipDetailM
               <span>{formatDate(dateStr)}</span>
             </div>
 
-            {/* Shot type & tags */}
-            {(clip.shotType || (clip.tags && clip.tags.length > 0)) && (
+            {/* Shot type */}
+            <div>
+              <p className="text-[11px] text-muted uppercase tracking-wider mb-1.5">Shot Type</p>
               <div className="flex items-center gap-1.5 flex-wrap">
-                {clip.shotType && (
-                  <span className="px-2 py-0.5 bg-accent/15 text-accent rounded-full text-xs font-medium">
-                    {clip.shotType}
-                  </span>
-                )}
-                {clip.tags?.map((tag) => (
-                  <span
-                    key={tag}
-                    className="px-2 py-0.5 bg-white/5 text-neutral-400 rounded-full text-xs"
+                {["Close-Up", "Extreme Close-Up", "Medium", "Wide", "Full Body", "Over the Shoulder", "POV", "Top Down", "Low Angle", "High Angle", "Tracking"].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => saveShotType(localShotType === type ? "" : type)}
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                      localShotType === type
+                        ? "bg-accent text-white"
+                        : "bg-white/5 text-neutral-500 hover:text-neutral-300 hover:bg-white/10"
+                    }`}
                   >
-                    {tag}
-                  </span>
+                    {type}
+                  </button>
                 ))}
               </div>
-            )}
+            </div>
+
+            {/* Tags */}
+            <div>
+              <p className="text-[11px] text-muted uppercase tracking-wider mb-1.5">Tags</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {localTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/5 text-neutral-400 rounded-full text-xs group/tag"
+                  >
+                    {tag}
+                    <button
+                      onClick={() => removeTag(tag)}
+                      className="text-neutral-600 hover:text-red-400 transition-colors"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+                <form
+                  onSubmit={(e) => { e.preventDefault(); addTag(); }}
+                  className="inline-flex"
+                >
+                  <input
+                    type="text"
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    placeholder="+ Add tag"
+                    className="bg-transparent border border-dashed border-white/10 rounded-full px-2.5 py-0.5 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-accent w-24"
+                  />
+                </form>
+              </div>
+            </div>
 
             {/* Metadata box */}
             <div className="border border-white/10 rounded-xl p-4 space-y-3">
