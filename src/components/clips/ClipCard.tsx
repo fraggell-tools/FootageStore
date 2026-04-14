@@ -4,7 +4,7 @@ import { useRef, useState, useCallback } from "react";
 
 interface Clip {
   id: string;
-  name: string;
+  name: string | null;
   clientId: string;
   clientName: string;
   duration: number;

@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 
 interface Clip {
   id: string;
-  name: string;
+  name: string | null;
   clientId: string;
   clientName: string;
   duration: number;
@@ -111,7 +111,7 @@ export default function ClipDetailModal({ clip, onClose, onDelete }: ClipDetailM
         {/* Top bar with close */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
           <div className="min-w-0">
-            <h2 className="text-white font-semibold truncate">{clip.name}</h2>
+            <h2 className="text-white font-semibold truncate">{clip.name || clip.originalFilename}</h2>
           </div>
           <button
             onClick={onClose}
