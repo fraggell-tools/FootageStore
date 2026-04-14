@@ -86,7 +86,8 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
       {/* Thumbnail area */}
       <div
         ref={containerRef}
-        className="aspect-video relative"
+        className="relative overflow-hidden"
+        style={{ aspectRatio: clip.width && clip.height ? `${clip.width}/${clip.height}` : "16/9" }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
