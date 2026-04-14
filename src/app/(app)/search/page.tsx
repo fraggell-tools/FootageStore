@@ -158,6 +158,10 @@ export default function SearchPage() {
         <ClipDetailModal
           clip={selectedClip}
           onClose={() => setSelectedClip(null)}
+          onDelete={(clipId) => {
+            setClips((prev) => prev.filter((c) => c.id !== clipId));
+            setSelectedClip(null);
+          }}
         />
       )}
     </div>
