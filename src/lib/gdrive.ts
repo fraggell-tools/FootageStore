@@ -240,35 +240,45 @@ export async function listClientFolders(): Promise<DriveFile[]> {
 }
 
 /**
- * List all files (excluding subfolders) inside a specific folder.
+ * List all files inside a specific folder, recursing into subfolders.
  */
 export async function listFilesInFolder(folderId: string): Promise<DriveFile[]> {
   const drive = getDrive();
   const files: DriveFile[] = [];
-  let pageToken: string | undefined;
+  const foldersToScan = [folderId];
 
-  do {
-    const res = await drive.files.list({
-      q: `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
-      fields: "nextPageToken, files(id, name, mimeType, size, createdTime)",
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      pageSize: 100,
-      pageToken,
-    });
+  while (foldersToScan.length > 0) {
+    const currentFolderId = foldersToScan.pop()!;
+    let pageToken: string | undefined;
 
-    for (const f of res.data.files || []) {
-      files.push({
-        id: f.id!,
-        name: f.name!,
-        mimeType: f.mimeType!,
-        size: parseInt(f.size || "0", 10),
-        createdTime: f.createdTime!,
+    do {
+      const res = await drive.files.list({
+        q: `'${currentFolderId}' in parents and trashed = false`,
+        fields: "nextPageToken, files(id, name, mimeType, size, createdTime)",
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        pageSize: 100,
+        pageToken,
       });
-    }
 
-    pageToken = res.data.nextPageToken || undefined;
-  } while (pageToken);
+      for (const f of res.data.files || []) {
+        if (f.mimeType === "application/vnd.google-apps.folder") {
+          // Queue subfolder for scanning
+          foldersToScan.push(f.id!);
+        } else {
+          files.push({
+            id: f.id!,
+            name: f.name!,
+            mimeType: f.mimeType!,
+            size: parseInt(f.size || "0", 10),
+            createdTime: f.createdTime!,
+          });
+        }
+      }
+
+      pageToken = res.data.nextPageToken || undefined;
+    } while (pageToken);
+  }
 
   return files;
 }
