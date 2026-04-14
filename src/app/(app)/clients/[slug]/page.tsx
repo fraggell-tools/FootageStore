@@ -444,6 +444,8 @@ export default function ClientDetailPage() {
           onBulkAddSkus={handleBulkAddSkus}
           onBulkSetShotType={handleBulkSetShotType}
           onBulkDownload={handleBulkDownload}
+          existingTags={allTags.map(([tag]) => tag)}
+          existingSkus={allSkus.map(([sku]) => sku)}
         />
       )}
 

@@ -16,6 +16,8 @@ interface BulkActionBarProps {
   onBulkAddSkus: (skus: string[]) => Promise<void>;
   onBulkSetShotType: (shotType: string) => Promise<void>;
   onBulkDownload: () => void;
+  existingTags: string[];
+  existingSkus: string[];
 }
 
 type ActivePanel = null | "tags" | "skus" | "shotType";
@@ -29,6 +31,8 @@ export default function BulkActionBar({
   onBulkAddSkus,
   onBulkSetShotType,
   onBulkDownload,
+  existingTags,
+  existingSkus,
 }: BulkActionBarProps) {
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [tagInput, setTagInput] = useState("");
@@ -104,14 +108,28 @@ export default function BulkActionBar({
               Tags
             </button>
             {activePanel === "tags" && (
-              <div className="absolute bottom-full mb-2 left-0 bg-[#252525] border border-white/10 rounded-xl p-3 shadow-xl w-64">
+              <div className="absolute bottom-full mb-2 left-0 bg-[#252525] border border-white/10 rounded-xl p-3 shadow-xl w-72">
                 <p className="text-[11px] text-muted uppercase tracking-wider mb-2">Add tags to {selectedCount} clips</p>
+                {existingTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2.5 max-h-32 overflow-y-auto">
+                    {existingTags.map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() => { setLoading(true); onBulkAddTags([tag]).finally(() => setLoading(false)); }}
+                        disabled={loading}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium bg-white/5 text-neutral-400 hover:text-white hover:bg-accent transition-colors disabled:opacity-50"
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <form onSubmit={(e) => { e.preventDefault(); handleAddTags(); }} className="flex gap-2">
                   <input
                     type="text"
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
-                    placeholder="Tag1, Tag2..."
+                    placeholder="+ Custom tag..."
                     className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-accent"
                     autoFocus
                   />
@@ -141,14 +159,28 @@ export default function BulkActionBar({
               SKU
             </button>
             {activePanel === "skus" && (
-              <div className="absolute bottom-full mb-2 left-0 bg-[#252525] border border-white/10 rounded-xl p-3 shadow-xl w-64">
+              <div className="absolute bottom-full mb-2 left-0 bg-[#252525] border border-white/10 rounded-xl p-3 shadow-xl w-72">
                 <p className="text-[11px] text-muted uppercase tracking-wider mb-2">Add SKUs to {selectedCount} clips</p>
+                {existingSkus.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2.5 max-h-32 overflow-y-auto">
+                    {existingSkus.map((sku) => (
+                      <button
+                        key={sku}
+                        onClick={() => { setLoading(true); onBulkAddSkus([sku]).finally(() => setLoading(false)); }}
+                        disabled={loading}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 hover:text-white hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                      >
+                        {sku}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <form onSubmit={(e) => { e.preventDefault(); handleAddSkus(); }} className="flex gap-2">
                   <input
                     type="text"
                     value={skuInput}
                     onChange={(e) => setSkuInput(e.target.value)}
-                    placeholder="SKU1, SKU2..."
+                    placeholder="+ Custom SKU..."
                     className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 uppercase"
                     autoFocus
                   />
