@@ -19,6 +19,10 @@ function deploy() {
   console.log(`[${new Date().toISOString()}] Starting deployment...`);
 
   try {
+    // Reset any local changes (e.g. docker-compose.yml modified by docker) before pulling
+    console.log('Resetting local changes...');
+    execSync('git checkout -- .', { cwd: REPO_DIR, encoding: 'utf8', timeout: 10000 });
+
     // Pull latest code
     console.log('Pulling latest code...');
     const pullOutput = execSync('git pull origin main', { cwd: REPO_DIR, encoding: 'utf8', timeout: 60000 });
