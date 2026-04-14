@@ -121,8 +121,8 @@ export default function ClipCard({ clip, onSelect }: ClipCardProps) {
           />
         )}
 
-        {/* Duration badge */}
-        {clip.duration > 0 && (
+        {/* Duration badge — hide for images */}
+        {clip.duration > 0 && !/\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(clip.originalFilename) && (
           <div className="absolute top-2 right-2 z-10">
             <span className="px-1.5 py-0.5 bg-black/60 backdrop-blur-sm rounded text-xs text-white/80">
               {formatDuration(clip.duration)}

@@ -180,6 +180,7 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate }: C
   const sizeBytes = clip.fileSizeBytes || clip.fileSize || 0;
   const dateStr = clip.uploadedAt || clip.createdAt;
   const isPortrait = clip.height > clip.width;
+  const isImage = /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(clip.originalFilename);
 
   return (
     <div
@@ -204,33 +205,41 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate }: C
 
         {/* Main content: video left, info right */}
         <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto">
-          {/* Video side */}
+          {/* Media side */}
           <div className={`flex-1 bg-black flex items-center justify-center min-h-[300px] p-4 ${isPortrait ? "md:max-w-[50%]" : "md:max-w-[65%]"}`}>
-            <div
-              className="relative w-full h-full cursor-pointer flex items-center justify-center"
-              onClick={togglePlay}
-            >
-              <video
-                ref={videoRef}
+            {isImage ? (
+              <img
                 src={`/api/clips/${clip.id}/download`}
-                poster={thumbnailUrl}
+                alt={clip.name || clip.originalFilename}
                 className="max-w-full max-h-[70vh] object-contain"
-                preload="metadata"
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => setIsPlaying(false)}
-                controls={isPlaying}
               />
-              {!isPlaying && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center border border-white/20">
-                    <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
+            ) : (
+              <div
+                className="relative w-full h-full cursor-pointer flex items-center justify-center"
+                onClick={togglePlay}
+              >
+                <video
+                  ref={videoRef}
+                  src={`/api/clips/${clip.id}/download`}
+                  poster={thumbnailUrl}
+                  className="max-w-full max-h-[70vh] object-contain"
+                  preload="metadata"
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                  controls={isPlaying}
+                />
+                {!isPlaying && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center border border-white/20">
+                      <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Info side */}
