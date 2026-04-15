@@ -18,6 +18,7 @@ interface Client {
 interface Clip {
   id: string;
   name: string | null;
+  description?: string | null;
   clientId: string;
   clientName: string;
   duration: number;
@@ -208,10 +209,30 @@ export default function ClientDetailPage() {
   }, [clips]);
 
   const filteredClips = useMemo(() => {
+    // Build search terms: split on whitespace, drop empties, lowercase.
+    // Every term must appear somewhere in the haystack (AND semantics),
+    // so "product on screen" matches clips whose description mentions
+    // the product being on screen.
+    const searchTerms = search
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+
     return clips.filter((clip) => {
-      const matchesSearch = (clip.name || clip.originalFilename || "")
-        .toLowerCase()
-        .includes(search.toLowerCase());
+      let matchesSearch = true;
+      if (searchTerms.length > 0) {
+        const haystack = [
+          clip.name || "",
+          clip.originalFilename || "",
+          clip.description || "",
+          clip.shotType || "",
+          ...(clip.tags || []),
+          ...(clip.productSkus || []),
+        ]
+          .join(" ")
+          .toLowerCase();
+        matchesSearch = searchTerms.every((term) => haystack.includes(term));
+      }
       const matchesShotType = selectedShotTypes.size === 0 || (clip.shotType && selectedShotTypes.has(clip.shotType));
       const matchesTags =
         selectedTags.size === 0 ||

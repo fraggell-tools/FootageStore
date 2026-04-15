@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clips, clients } from "@/lib/db/schema";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -16,10 +16,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ clips: [], query: "" });
   }
 
-  // Convert search query to tsquery format
-  // Split into words, join with & for AND matching
-  const words = query.split(/\s+/).filter(Boolean);
-  const tsQuery = words.map((w) => `${w}:*`).join(" & ");
+  // Use websearch_to_tsquery so users can type natural language like
+  // "product on screen" without worrying about operators or stopwords.
+  // It handles AND/OR/quoted phrases and gracefully ignores stopwords.
 
   const results = await db
     .select({
@@ -41,15 +40,28 @@ export async function GET(request: NextRequest) {
       thumbnailPath: clips.thumbnailPath,
       spriteSheetPath: clips.spriteSheetPath,
       rank: sql<number>`ts_rank(
-        to_tsvector('english', COALESCE(${clips.name}, '') || ' ' || COALESCE(${clips.description}, '') || ' ' || COALESCE(${clips.originalFilename}, '')),
-        to_tsquery('english', ${tsQuery})
+        to_tsvector('english',
+          COALESCE(${clips.name}, '') || ' ' ||
+          COALESCE(${clips.description}, '') || ' ' ||
+          COALESCE(${clips.originalFilename}, '') || ' ' ||
+          COALESCE(${clips.shotType}, '') || ' ' ||
+          COALESCE(${clips.tags}::text, '') || ' ' ||
+          COALESCE(${clips.productSkus}::text, '')
+        ),
+        websearch_to_tsquery('english', ${query})
       )`.as("rank"),
     })
     .from(clips)
     .innerJoin(clients, eq(clips.clientId, clients.id))
     .where(
-      sql`to_tsvector('english', COALESCE(${clips.name}, '') || ' ' || COALESCE(${clips.description}, '') || ' ' || COALESCE(${clips.originalFilename}, ''))
-        @@ to_tsquery('english', ${tsQuery})`
+      sql`to_tsvector('english',
+        COALESCE(${clips.name}, '') || ' ' ||
+        COALESCE(${clips.description}, '') || ' ' ||
+        COALESCE(${clips.originalFilename}, '') || ' ' ||
+        COALESCE(${clips.shotType}, '') || ' ' ||
+        COALESCE(${clips.tags}::text, '') || ' ' ||
+        COALESCE(${clips.productSkus}::text, '')
+      ) @@ websearch_to_tsquery('english', ${query})`
     )
     .orderBy(sql`rank DESC`)
     .limit(limit);
