@@ -30,6 +30,15 @@ export default function UsersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // Edit modal state
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editRole, setEditRole] = useState("editor");
+  const [editPassword, setEditPassword] = useState("");
+  const [editError, setEditError] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
   const fetchUsers = async () => {
     try {
       const res = await fetch("/api/users");
@@ -46,13 +55,89 @@ export default function UsersPage() {
     fetchUsers();
   }, []);
 
-  const generatePassword = () => {
+  const generatePassword = (target: "new" | "edit" = "new") => {
     const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let result = "";
     for (let i = 0; i < 12; i++) {
       result += chars[Math.floor(Math.random() * chars.length)];
     }
-    setNewPassword(result);
+    if (target === "new") setNewPassword(result);
+    else setEditPassword(result);
+  };
+
+  const openEdit = (user: User) => {
+    setEditingUser(user);
+    setEditName(user.name);
+    setEditEmail(user.email);
+    setEditRole(user.role);
+    setEditPassword("");
+    setEditError("");
+  };
+
+  const closeEdit = () => {
+    setEditingUser(null);
+    setEditError("");
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    setEditSubmitting(true);
+    setEditError("");
+
+    try {
+      const payload: Record<string, string> = {
+        name: editName.trim(),
+        email: editEmail.trim(),
+        role: editRole,
+      };
+      if (editPassword.trim()) payload.password = editPassword;
+
+      const res = await fetch(`/api/users/${editingUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update user");
+      }
+
+      closeEdit();
+      fetchUsers();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to update user");
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editingUser) return;
+    if (!confirm(`Delete ${editingUser.name}? This can't be undone.`)) return;
+
+    setEditSubmitting(true);
+    setEditError("");
+
+    try {
+      const res = await fetch(`/api/users/${editingUser.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete user");
+      }
+
+      closeEdit();
+      fetchUsers();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to delete user");
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -173,7 +258,7 @@ export default function UsersPage() {
                 />
                 <button
                   type="button"
-                  onClick={generatePassword}
+                  onClick={() => generatePassword("new")}
                   className="bg-bg border border-border hover:border-accent text-neutral-300 hover:text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors whitespace-nowrap"
                 >
                   Generate
@@ -248,6 +333,9 @@ export default function UsersPage() {
                 <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-5 py-3">
                   Created
                 </th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-5 py-3">
+                  {/* actions */}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -265,17 +353,149 @@ export default function UsersPage() {
                       {formatDate(user.createdAt)}
                     </span>
                   </td>
+                  <td className="px-5 py-3.5 text-right">
+                    <button
+                      onClick={() => openEdit(user)}
+                      className="text-xs font-medium text-neutral-300 hover:text-white border border-border hover:border-accent rounded-md px-3 py-1.5 transition-colors"
+                    >
+                      Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-5 py-10 text-center text-muted text-sm">
+                  <td colSpan={5} className="px-5 py-10 text-center text-muted text-sm">
                     No users found.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {editingUser && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={closeEdit}
+        >
+          <div
+            className="bg-surface border border-border rounded-xl p-6 w-full max-w-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-white">Edit user</h2>
+              <button
+                type="button"
+                onClick={closeEdit}
+                className="text-muted hover:text-white"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="bg-bg border border-border rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-accent w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="bg-bg border border-border rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-accent w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
+                  Role
+                </label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value)}
+                  className="bg-bg border border-border rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-accent w-full appearance-none"
+                >
+                  <option value="editor">Editor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
+                  Reset password
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder="Leave blank to keep current"
+                    className="bg-bg border border-border rounded-lg px-4 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-accent w-full font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => generatePassword("edit")}
+                    className="bg-bg border border-border hover:border-accent text-neutral-300 hover:text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors whitespace-nowrap"
+                  >
+                    Generate
+                  </button>
+                </div>
+                <p className="text-xs text-muted mt-1">
+                  Share any new password with the user directly.
+                </p>
+              </div>
+
+              {editError && <p className="text-red-400 text-xs">{editError}</p>}
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={editSubmitting}
+                  className="text-red-400 hover:text-red-300 disabled:opacity-50 text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+                >
+                  Delete user
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={closeEdit}
+                    className="px-4 py-2 text-sm text-muted hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={
+                      editSubmitting ||
+                      !editName.trim() ||
+                      !editEmail.trim()
+                    }
+                    className="bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                  >
+                    {editSubmitting ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
