@@ -358,7 +358,43 @@ export default function ClientDetailPage() {
       setClips((prev) =>
         prev.map((c) => {
           const u = updatedClips.find((x: Clip) => x.id === c.id);
-          return u ? { ...c, productSkus: u.product_skus } : c;
+          return u ? { ...c, productSkus: u.productSkus } : c;
+        })
+      );
+    }
+  }, [selectedClipIds]);
+
+  const handleBulkRemoveTags = useCallback(async (tags: string[]) => {
+    const clipIds = Array.from(selectedClipIds);
+    const res = await fetch("/api/clips/bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clipIds, action: "removeTags", value: tags }),
+    });
+    if (res.ok) {
+      const { updatedClips } = await res.json();
+      setClips((prev) =>
+        prev.map((c) => {
+          const u = updatedClips.find((x: Clip) => x.id === c.id);
+          return u ? { ...c, tags: u.tags } : c;
+        })
+      );
+    }
+  }, [selectedClipIds]);
+
+  const handleBulkRemoveSkus = useCallback(async (skus: string[]) => {
+    const clipIds = Array.from(selectedClipIds);
+    const res = await fetch("/api/clips/bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clipIds, action: "removeSkus", value: skus }),
+    });
+    if (res.ok) {
+      const { updatedClips } = await res.json();
+      setClips((prev) =>
+        prev.map((c) => {
+          const u = updatedClips.find((x: Clip) => x.id === c.id);
+          return u ? { ...c, productSkus: u.productSkus } : c;
         })
       );
     }
@@ -596,6 +632,8 @@ export default function ClientDetailPage() {
           onDeselectAll={deselectAll}
           onBulkAddTags={handleBulkAddTags}
           onBulkAddSkus={handleBulkAddSkus}
+          onBulkRemoveTags={handleBulkRemoveTags}
+          onBulkRemoveSkus={handleBulkRemoveSkus}
           onBulkSetShotType={handleBulkSetShotType}
           onBulkDownload={handleBulkDownload}
           existingTags={allTags.map(([tag]) => tag)}

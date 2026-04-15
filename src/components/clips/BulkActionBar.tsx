@@ -21,6 +21,8 @@ interface BulkActionBarProps {
   onDeselectAll: () => void;
   onBulkAddTags: (tags: string[]) => Promise<void>;
   onBulkAddSkus: (skus: string[]) => Promise<void>;
+  onBulkRemoveTags: (tags: string[]) => Promise<void>;
+  onBulkRemoveSkus: (skus: string[]) => Promise<void>;
   onBulkSetShotType: (shotType: string) => Promise<void>;
   onBulkDownload: () => void;
   existingTags: string[];
@@ -56,6 +58,8 @@ export default function BulkActionBar({
   onDeselectAll,
   onBulkAddTags,
   onBulkAddSkus,
+  onBulkRemoveTags,
+  onBulkRemoveSkus,
   onBulkSetShotType,
   onBulkDownload,
   existingTags,
@@ -129,31 +133,43 @@ export default function BulkActionBar({
     }
   }, [onBulkSetShotType, selectedCount, showToast]);
 
-  // Quick-pick handlers for existing tag/SKU pills
-  const handleQuickAddTag = useCallback(
-    async (tag: string) => {
+  // Quick-pick handlers for existing tag/SKU pills.
+  // If the value is already on ALL selected clips, clicking removes it.
+  // Otherwise, clicking adds it (partial → all, none → all).
+  const handleQuickToggleTag = useCallback(
+    async (tag: string, applied: "all" | "some" | undefined) => {
       setLoading(true);
       try {
-        await onBulkAddTags([tag]);
-        showToast(`Added "${tag}" to ${selectedCount} clip${selectedCount > 1 ? "s" : ""}`);
+        if (applied === "all") {
+          await onBulkRemoveTags([tag]);
+          showToast(`Removed "${tag}" from ${selectedCount} clip${selectedCount > 1 ? "s" : ""}`);
+        } else {
+          await onBulkAddTags([tag]);
+          showToast(`Added "${tag}" to ${selectedCount} clip${selectedCount > 1 ? "s" : ""}`);
+        }
       } finally {
         setLoading(false);
       }
     },
-    [onBulkAddTags, selectedCount, showToast]
+    [onBulkAddTags, onBulkRemoveTags, selectedCount, showToast]
   );
 
-  const handleQuickAddSku = useCallback(
-    async (sku: string) => {
+  const handleQuickToggleSku = useCallback(
+    async (sku: string, applied: "all" | "some" | undefined) => {
       setLoading(true);
       try {
-        await onBulkAddSkus([sku]);
-        showToast(`Added "${sku}" to ${selectedCount} clip${selectedCount > 1 ? "s" : ""}`);
+        if (applied === "all") {
+          await onBulkRemoveSkus([sku]);
+          showToast(`Removed "${sku}" from ${selectedCount} clip${selectedCount > 1 ? "s" : ""}`);
+        } else {
+          await onBulkAddSkus([sku]);
+          showToast(`Added "${sku}" to ${selectedCount} clip${selectedCount > 1 ? "s" : ""}`);
+        }
       } finally {
         setLoading(false);
       }
     },
-    [onBulkAddSkus, selectedCount, showToast]
+    [onBulkAddSkus, onBulkRemoveSkus, selectedCount, showToast]
   );
 
   // Clear the confirmation message when the user switches panels
@@ -214,14 +230,14 @@ export default function BulkActionBar({
                       return (
                         <button
                           key={tag}
-                          onClick={() => handleQuickAddTag(tag)}
+                          onClick={() => handleQuickToggleTag(tag, applied)}
                           disabled={loading}
                           title={
                             applied === "all"
-                              ? `Already on all ${selectedCount} clips`
+                              ? `Click to remove from all ${selectedCount} clips`
                               : applied === "some"
-                                ? `On some selected clips`
-                                : undefined
+                                ? `On some clips — click to add to all`
+                                : `Click to add to ${selectedCount} clips`
                           }
                           className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1 ${
                             applied === "all"
@@ -288,14 +304,14 @@ export default function BulkActionBar({
                       return (
                         <button
                           key={sku}
-                          onClick={() => handleQuickAddSku(sku)}
+                          onClick={() => handleQuickToggleSku(sku, applied)}
                           disabled={loading}
                           title={
                             applied === "all"
-                              ? `Already on all ${selectedCount} clips`
+                              ? `Click to remove from all ${selectedCount} clips`
                               : applied === "some"
-                                ? `On some selected clips`
-                                : undefined
+                                ? `On some clips — click to add to all`
+                                : `Click to add to ${selectedCount} clips`
                           }
                           className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1 ${
                             applied === "all"
