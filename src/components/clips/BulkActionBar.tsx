@@ -60,7 +60,6 @@ export default function BulkActionBar({
     try {
       await onBulkAddTags(tags);
       setTagInput("");
-      setActivePanel(null);
       showToast(`Added ${tags.length} tag${tags.length > 1 ? "s" : ""} to ${selectedCount} clip${selectedCount > 1 ? "s" : ""}`);
     } finally {
       setLoading(false);
@@ -74,7 +73,6 @@ export default function BulkActionBar({
     try {
       await onBulkAddSkus(skus);
       setSkuInput("");
-      setActivePanel(null);
       showToast(`Added ${skus.length} SKU${skus.length > 1 ? "s" : ""} to ${selectedCount} clip${selectedCount > 1 ? "s" : ""}`);
     } finally {
       setLoading(false);
@@ -85,7 +83,6 @@ export default function BulkActionBar({
     setLoading(true);
     try {
       await onBulkSetShotType(shotType);
-      setActivePanel(null);
       showToast(`Set shot type to ${shotType} on ${selectedCount} clip${selectedCount > 1 ? "s" : ""}`);
     } finally {
       setLoading(false);
@@ -119,18 +116,23 @@ export default function BulkActionBar({
     [onBulkAddSkus, selectedCount, showToast]
   );
 
+  // Clear the confirmation message when the user switches panels
+  useEffect(() => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(null);
+  }, [activePanel]);
+
+  const toastBanner = toast ? (
+    <div className="mb-2.5 flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-medium px-2.5 py-1.5 rounded-lg">
+      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+      <span className="truncate">{toast}</span>
+    </div>
+  ) : null;
+
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 duration-200">
-      {toast && (
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap pointer-events-none">
-          <div className="bg-emerald-500/95 backdrop-blur-xl text-white text-xs font-medium px-3 py-1.5 rounded-full shadow-lg shadow-black/40 flex items-center gap-1.5">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            {toast}
-          </div>
-        </div>
-      )}
       <div className="bg-[#1e1e1e] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 backdrop-blur-xl px-5 py-3 flex items-center gap-4">
         {/* Selection count */}
         <div className="flex items-center gap-3 border-r border-white/10 pr-4">
@@ -163,6 +165,7 @@ export default function BulkActionBar({
             </button>
             {activePanel === "tags" && (
               <div className="absolute bottom-full mb-2 left-0 bg-[#252525] border border-white/10 rounded-xl p-3 shadow-xl w-72">
+                {toastBanner}
                 <p className="text-[11px] text-muted uppercase tracking-wider mb-2">Add tags to {selectedCount} clips</p>
                 {existingTags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2.5 max-h-32 overflow-y-auto">
@@ -214,6 +217,7 @@ export default function BulkActionBar({
             </button>
             {activePanel === "skus" && (
               <div className="absolute bottom-full mb-2 left-0 bg-[#252525] border border-white/10 rounded-xl p-3 shadow-xl w-72">
+                {toastBanner}
                 <p className="text-[11px] text-muted uppercase tracking-wider mb-2">Add SKUs to {selectedCount} clips</p>
                 {existingSkus.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2.5 max-h-32 overflow-y-auto">
@@ -265,6 +269,7 @@ export default function BulkActionBar({
             </button>
             {activePanel === "shotType" && (
               <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-[#252525] border border-white/10 rounded-xl p-3 shadow-xl w-56">
+                {toastBanner}
                 <p className="text-[11px] text-muted uppercase tracking-wider mb-2">Set shot type for {selectedCount} clips</p>
                 <div className="flex flex-wrap gap-1.5">
                   {SHOT_TYPES.map((type) => (
