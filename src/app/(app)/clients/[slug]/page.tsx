@@ -414,6 +414,19 @@ export default function ClientDetailPage() {
     }
   }, [selectedClipIds]);
 
+  const handleBulkDelete = useCallback(async () => {
+    const clipIds = Array.from(selectedClipIds);
+    const res = await fetch("/api/clips/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clipIds }),
+    });
+    if (res.ok) {
+      setClips((prev) => prev.filter((c) => !selectedClipIds.has(c.id)));
+      setSelectedClipIds(new Set());
+    }
+  }, [selectedClipIds]);
+
   const handleBulkDownload = useCallback(() => {
     const ids = Array.from(selectedClipIds);
     ids.forEach((id, i) => {
@@ -635,6 +648,7 @@ export default function ClientDetailPage() {
           onBulkRemoveTags={handleBulkRemoveTags}
           onBulkRemoveSkus={handleBulkRemoveSkus}
           onBulkSetShotType={handleBulkSetShotType}
+          onBulkDelete={handleBulkDelete}
           onBulkDownload={handleBulkDownload}
           existingTags={allTags.map(([tag]) => tag)}
           existingSkus={allSkus.map(([sku]) => sku)}
