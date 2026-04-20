@@ -197,10 +197,26 @@ export default function ClientDetailPage() {
         if (!foundClient) return;
         setClient(foundClient);
 
-        const clipsRes = await fetch(`/api/clips?clientId=${foundClient.id}`);
-        if (!clipsRes.ok) return;
-        const clipsData = await clipsRes.json();
-        setClips(clipsData.clips || []);
+        // Fetch ALL clips for this client — in-memory filters (shot type,
+        // tags, SKUs) need the full set, and the API paginates at 100/page.
+        const PAGE_SIZE = 100;
+        const firstRes = await fetch(`/api/clips?clientId=${foundClient.id}&limit=${PAGE_SIZE}&page=1`);
+        if (!firstRes.ok) return;
+        const firstData = await firstRes.json();
+        let allClips: Clip[] = firstData.clips || [];
+        const totalPages = firstData.pagination?.totalPages ?? 1;
+        if (totalPages > 1) {
+          const pageNums = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+          const rest = await Promise.all(
+            pageNums.map((p) =>
+              fetch(`/api/clips?clientId=${foundClient.id}&limit=${PAGE_SIZE}&page=${p}`)
+                .then((r) => (r.ok ? r.json() : { clips: [] }))
+                .then((d) => d.clips || [])
+            )
+          );
+          allClips = allClips.concat(...rest);
+        }
+        setClips(allClips);
 
         // Fetch collections for this client
         const colRes = await fetch(`/api/collections?clientId=${foundClient.id}`);
