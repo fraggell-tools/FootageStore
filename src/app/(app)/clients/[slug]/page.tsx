@@ -622,12 +622,12 @@ export default function ClientDetailPage() {
           </svg>
           Clients
           <span className="text-border mx-1">/</span>
-          <span className="text-white">{client.name}</span>
+          <span style={{ color: "var(--color-fg)" }}>{client.name}</span>
         </Link>
 
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-white">{client.name}</h1>
+            <h1 className="text-2xl font-bold" style={{ color: "var(--color-fg)" }}>{client.name}</h1>
             <p className="text-muted text-sm mt-1">
               {clips.length} clip{clips.length !== 1 ? "s" : ""}
               {client.totalStorageBytes > 0 && (
