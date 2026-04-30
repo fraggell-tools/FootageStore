@@ -148,7 +148,7 @@ export default function ManageClientsPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Manage Clients</h1>
+          <h1 className="text-2xl font-bold" style={{ color: "var(--color-fg)" }}>Manage Clients</h1>
           <p className="text-muted text-sm mt-1">
             {clients.length} client{clients.length !== 1 ? "s" : ""}
           </p>
@@ -170,7 +170,7 @@ export default function ManageClientsPage() {
           className="bg-surface border border-border rounded-xl p-4 mb-6 flex items-end gap-4"
         >
           <div className="flex-1">
-            <label className="block text-sm font-medium text-neutral-300 mb-1.5">
+            <label className="block text-sm font-medium text-muted mb-1.5">
               Client Name
             </label>
             <input
@@ -178,7 +178,8 @@ export default function ManageClientsPage() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Enter client name..."
-              className="bg-bg border border-border rounded-lg px-4 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-accent w-full"
+              className="bg-bg border border-border rounded-lg px-4 py-2 text-sm placeholder-muted focus:outline-none focus:border-accent w-full"
+              style={{ color: "var(--color-fg)" }}
               autoFocus
             />
             {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
@@ -246,7 +247,8 @@ export default function ManageClientsPage() {
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
                             onKeyDown={(e) => { if (e.key === "Escape") cancelEditing(); }}
-                            className="bg-bg border border-accent rounded-md px-3 py-1 text-sm text-white focus:outline-none w-full max-w-xs"
+                            className="bg-bg border border-accent rounded-md px-3 py-1 text-sm focus:outline-none w-full max-w-xs"
+                            style={{ color: "var(--color-fg)" }}
                             placeholder="Brand slug name"
                             autoFocus
                           />
@@ -260,7 +262,8 @@ export default function ManageClientsPage() {
                               if (e.key === "Enter") handleSaveEdit(client.id);
                               if (e.key === "Escape") cancelEditing();
                             }}
-                            className="bg-bg border border-border rounded-md px-3 py-1 text-sm text-white focus:outline-none w-full max-w-xs"
+                            className="bg-bg border border-border rounded-md px-3 py-1 text-sm focus:outline-none w-full max-w-xs"
+                            style={{ color: "var(--color-fg)" }}
                             placeholder="Display name (optional)"
                           />
                           <button
@@ -287,7 +290,7 @@ export default function ManageClientsPage() {
                       </div>
                     ) : (
                       <div>
-                        <span className="text-sm text-white font-medium">{client.displayName || client.name}</span>
+                        <span className="text-sm font-medium" style={{ color: "var(--color-fg)" }}>{client.displayName || client.name}</span>
                         {client.displayName && (
                           <p className="text-xs text-muted mt-0.5">{client.name}</p>
                         )}
@@ -295,15 +298,15 @@ export default function ManageClientsPage() {
                     )}
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-sm text-neutral-300">{client.clipCount}</span>
+                    <span className="text-sm text-muted">{client.clipCount}</span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-sm text-neutral-300">
+                    <span className="text-sm text-muted">
                       {formatBytes(client.totalStorageBytes || 0)}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-sm text-neutral-300">
+                    <span className="text-sm text-muted">
                       {client.createdAt ? formatDate(client.createdAt) : "-"}
                     </span>
                   </td>
