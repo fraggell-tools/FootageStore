@@ -28,12 +28,14 @@ interface SceneAnalysis {
   description: string;
   shotType: string;
   tags: string[];
+  isTalkingToCamera: boolean;
 }
 
 export async function generateClipName(
   inputPath: string,
   duration: number,
-  clipId: string
+  clipId: string,
+  transcript?: string
 ): Promise<SceneAnalysis> {
   const tmpDir = path.join("/tmp", `clip-analysis-${clipId}`);
   await ensureDir(tmpDir);
@@ -79,6 +81,11 @@ export async function generateClipName(
       });
     }
 
+    const trimmedTranscript = transcript?.trim() ?? "";
+    const transcriptBlock = trimmedTranscript
+      ? `\n\nAUDIO TRANSCRIPT (Whisper, audio track of the same clip):\n"""\n${trimmedTranscript.slice(0, 4000)}\n"""\nUse this alongside the visuals — reflect what's said in the description and use it as one signal for the IS_TALKING_TO_CAMERA judgement below.`
+      : "";
+
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 500,
@@ -89,14 +96,24 @@ export async function generateClipName(
             ...imageContents,
             {
               type: "text",
-              text: `These are ${FRAME_COUNT} frames extracted in sequence from a video clip (evenly spaced from start to end). Analyze the full sequence as if you're watching the video.
+              text: `These are ${FRAME_COUNT} frames extracted in sequence from a video clip (evenly spaced from start to end). Analyze the full sequence as if you're watching the video.${transcriptBlock}
 
 Respond in EXACTLY this format:
 
 TITLE: [3-8 word descriptive title]
 SHOT_TYPE: [exactly one of: ${SHOT_TYPES.join(", ")}]
+IS_TALKING_TO_CAMERA: [yes or no — see strict criteria below]
 TAGS: [comma-separated tags from the categories below]
 DESCRIPTION: [Detailed paragraph describing the scene]
+
+For IS_TALKING_TO_CAMERA, answer "yes" ONLY when ALL of these are true:
+- A person's face is directly addressing the camera (front-facing, looking at lens)
+- Lip movement is visible across multiple frames consistent with the transcript
+- The speech is sustained delivery, not a brief snippet or background chatter
+- Voiceover, off-screen narration, overheard speech, or audio from someone whose face isn't shown → "no"
+- Music with vocals → "no"
+- A person facing camera but not actually speaking (e.g. silent reaction, posed shot) → "no"
+This is a strict gate — when in doubt, answer "no".
 
 For SHOT_TYPE, classify the PRIMARY camera framing. Pick one:
 - Close-Up: Head/face or product fills most of the frame
@@ -116,7 +133,7 @@ For TAGS, select ALL that apply from these categories:
 
 Subject: Man, Woman, Couple, Group, Hands Only, No People
 Action: Talking Head, Holding Product, Applying Product, Unboxing, Demonstrating, Eating/Drinking, Exercising, Walking, Sitting, Dancing
-Content Style: UGC, Professional, Testimonial, Product Demo, Lifestyle, B-Roll, Tutorial, Before & After, ASMR, Transition
+Content Style: UGC, Professional, Testimonial, Product Demo, Lifestyle, A-Roll, B-Roll, Tutorial, Before & After, ASMR, Transition (use A-Roll only when IS_TALKING_TO_CAMERA is yes; use B-Roll otherwise; never both)
 Setting: Studio, Outdoor, Kitchen, Bathroom, Bedroom, Living Room, Gym, Office, Car, Restaurant
 Mood: Bright, Moody, Natural Light, Studio Lit, Warm, Cool, Dark
 
@@ -145,6 +162,7 @@ Write naturally — this description will be used for search, so use the kind of
     // Parse the response
     const titleMatch = text.match(/TITLE:\s*(.+)/i);
     const shotTypeMatch = text.match(/SHOT_TYPE:\s*(.+)/i);
+    const talkingMatch = text.match(/IS_TALKING_TO_CAMERA:\s*(.+)/i);
     const tagsMatch = text.match(/TAGS:\s*(.+)/i);
     const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+)/i);
 
@@ -153,13 +171,14 @@ Write naturally — this description will be used for search, so use the kind of
     const shotType = SHOT_TYPES.find(
       (t) => t.toLowerCase() === rawShotType.toLowerCase()
     ) ?? "Other";
+    const isTalkingToCamera = /^\s*yes\b/i.test(talkingMatch?.[1] ?? "");
     const tags = tagsMatch?.[1]
       ?.split(",")
       .map((t) => t.trim())
       .filter((t) => t.length > 0) ?? [];
     const description = descMatch?.[1]?.trim() ?? text;
 
-    return { name, description, shotType, tags };
+    return { name, description, shotType, tags, isTalkingToCamera };
   } finally {
     // Clean up temp files
     for (const fp of framePaths) {

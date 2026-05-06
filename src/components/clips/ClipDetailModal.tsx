@@ -25,6 +25,8 @@ interface Clip {
   description?: string | null;
   productSkus?: string[] | null;
   driveFileId?: string | null;
+  hasSpeech?: boolean | null;
+  transcript?: string | null;
 }
 
 interface CollectionSummary {
@@ -84,6 +86,9 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
   const [localTags, setLocalTags] = useState<string[]>(clip.tags || []);
   const [localShotType, setLocalShotType] = useState<string>(clip.shotType || "");
   const [localSkus, setLocalSkus] = useState<string[]>(clip.productSkus || []);
+  const [localHasSpeech, setLocalHasSpeech] = useState<boolean | null>(
+    clip.hasSpeech ?? null
+  );
   const [newSku, setNewSku] = useState("");
   const [descExpanded, setDescExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -118,11 +123,16 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
 
   const addTag = useCallback(() => {
     const tag = newTag.trim();
-    if (tag && !localTags.includes(tag)) {
+    setNewTag("");
+    if (!tag) return;
+    // Route A-Roll / B-Roll through saveRoll so hasSpeech stays in sync with the tag.
+    const lower = tag.toLowerCase();
+    if (lower === "a-roll" || lower === "aroll") { saveRoll(true); return; }
+    if (lower === "b-roll" || lower === "broll") { saveRoll(false); return; }
+    if (!localTags.includes(tag)) {
       saveTags([...localTags, tag]);
     }
-    setNewTag("");
-  }, [newTag, localTags, saveTags]);
+  }, [newTag, localTags, saveTags, saveRoll]);
 
   const removeTag = useCallback((tag: string) => {
     saveTags(localTags.filter((t) => t !== tag));
@@ -153,6 +163,26 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
   const removeSku = useCallback((sku: string) => {
     saveSkus(localSkus.filter((s) => s !== sku));
   }, [localSkus, saveSkus]);
+
+  // Update hasSpeech and the A-Roll / B-Roll tag in one call so they stay in sync.
+  const saveRoll = useCallback(async (isAroll: boolean) => {
+    if (localHasSpeech === isAroll) return;
+    const nextTags = localTags
+      .filter((t) => t.toLowerCase() !== "a-roll" && t.toLowerCase() !== "b-roll")
+      .concat(isAroll ? "A-Roll" : "B-Roll");
+    setLocalHasSpeech(isAroll);
+    setLocalTags(nextTags);
+    try {
+      const res = await fetch(`/api/clips/${clip.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: nextTags, hasSpeech: isAroll }),
+      });
+      if (res.ok && onUpdate) {
+        onUpdate(clip.id, { tags: nextTags, hasSpeech: isAroll });
+      }
+    } catch {}
+  }, [clip.id, localHasSpeech, localTags, onUpdate]);
 
   // Fetch which collections this clip belongs to (single query)
   useEffect(() => {
@@ -277,6 +307,36 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
               <span>{formatDate(dateStr)}</span>
             </div>
 
+            {/* A-Roll / B-Roll */}
+            <div>
+              <p className="text-[11px] text-muted uppercase tracking-wider mb-1.5">Roll Type</p>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-surface border border-border rounded-lg p-0.5">
+                  <button
+                    onClick={() => saveRoll(true)}
+                    title="Mark as talking-to-camera"
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      localHasSpeech === true ? "bg-accent text-white" : "text-neutral-400 hover:text-white"
+                    }`}
+                  >
+                    A-Roll
+                  </button>
+                  <button
+                    onClick={() => saveRoll(false)}
+                    title="Mark as b-roll (everything else)"
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      localHasSpeech === false ? "bg-accent text-white" : "text-neutral-400 hover:text-white"
+                    }`}
+                  >
+                    B-Roll
+                  </button>
+                </div>
+                {localHasSpeech === null && (
+                  <span className="text-[11px] text-muted">Not yet classified</span>
+                )}
+              </div>
+            </div>
+
             {/* Shot type */}
             <div>
               <p className="text-[11px] text-muted uppercase tracking-wider mb-1.5">Shot Type</p>
@@ -326,7 +386,9 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
             <div>
               <p className="text-[11px] text-muted uppercase tracking-wider mb-1.5">Tags</p>
               <div className="flex items-center gap-1.5 flex-wrap">
-                {localTags.map((tag) => (
+                {localTags
+                  .filter((t) => t.toLowerCase() !== "a-roll" && t.toLowerCase() !== "b-roll")
+                  .map((tag) => (
                   <span
                     key={tag}
                     className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/5 text-neutral-400 rounded-full text-xs group/tag"
