@@ -121,6 +121,26 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
     } catch {}
   }, [clip.id, onUpdate]);
 
+  // Update hasSpeech and the A-Roll / B-Roll tag in one call so they stay in sync.
+  const saveRoll = useCallback(async (isAroll: boolean) => {
+    if (localHasSpeech === isAroll) return;
+    const nextTags = localTags
+      .filter((t) => t.toLowerCase() !== "a-roll" && t.toLowerCase() !== "b-roll")
+      .concat(isAroll ? "A-Roll" : "B-Roll");
+    setLocalHasSpeech(isAroll);
+    setLocalTags(nextTags);
+    try {
+      const res = await fetch(`/api/clips/${clip.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: nextTags, hasSpeech: isAroll }),
+      });
+      if (res.ok && onUpdate) {
+        onUpdate(clip.id, { tags: nextTags, hasSpeech: isAroll });
+      }
+    } catch {}
+  }, [clip.id, localHasSpeech, localTags, onUpdate]);
+
   const addTag = useCallback(() => {
     const tag = newTag.trim();
     setNewTag("");
@@ -163,26 +183,6 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
   const removeSku = useCallback((sku: string) => {
     saveSkus(localSkus.filter((s) => s !== sku));
   }, [localSkus, saveSkus]);
-
-  // Update hasSpeech and the A-Roll / B-Roll tag in one call so they stay in sync.
-  const saveRoll = useCallback(async (isAroll: boolean) => {
-    if (localHasSpeech === isAroll) return;
-    const nextTags = localTags
-      .filter((t) => t.toLowerCase() !== "a-roll" && t.toLowerCase() !== "b-roll")
-      .concat(isAroll ? "A-Roll" : "B-Roll");
-    setLocalHasSpeech(isAroll);
-    setLocalTags(nextTags);
-    try {
-      const res = await fetch(`/api/clips/${clip.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: nextTags, hasSpeech: isAroll }),
-      });
-      if (res.ok && onUpdate) {
-        onUpdate(clip.id, { tags: nextTags, hasSpeech: isAroll });
-      }
-    } catch {}
-  }, [clip.id, localHasSpeech, localTags, onUpdate]);
 
   // Fetch which collections this clip belongs to (single query)
   useEffect(() => {
