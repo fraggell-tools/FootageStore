@@ -6,7 +6,12 @@ import { ensureDir } from "../../src/lib/storage";
 
 const anthropic = new Anthropic();
 
-const FRAME_COUNT = 12;
+const MAX_FRAME_COUNT = 12;
+// Aim for ~4 frames per second; ffmpeg can't reliably seek to 12 evenly-spaced
+// frames in a 1-second clip, which was causing every ultra-short clip to fail.
+function pickFrameCount(duration: number): number {
+  return Math.min(MAX_FRAME_COUNT, Math.max(2, Math.floor(duration * 4)));
+}
 
 const SHOT_TYPES = [
   "Close-Up",
@@ -40,9 +45,10 @@ export async function generateClipName(
   const tmpDir = path.join("/tmp", `clip-analysis-${clipId}`);
   await ensureDir(tmpDir);
 
-  // Extract 12 frames evenly spaced through the clip
-  const timepoints = Array.from({ length: FRAME_COUNT }, (_, i) => {
-    const pct = (i + 0.5) / FRAME_COUNT;
+  const frameCount = pickFrameCount(duration);
+  // Evenly-spaced sample points across the clip
+  const timepoints = Array.from({ length: frameCount }, (_, i) => {
+    const pct = (i + 0.5) / frameCount;
     return pct * duration;
   });
 
@@ -96,7 +102,7 @@ export async function generateClipName(
             ...imageContents,
             {
               type: "text",
-              text: `These are ${FRAME_COUNT} frames extracted in sequence from a video clip (evenly spaced from start to end). Analyze the full sequence as if you're watching the video.${transcriptBlock}
+              text: `These are ${frameCount} frames extracted in sequence from a video clip (evenly spaced from start to end). Analyze the full sequence as if you're watching the video.${transcriptBlock}
 
 Respond in EXACTLY this format:
 
