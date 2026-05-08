@@ -2,7 +2,32 @@ import ffmpeg from "fluent-ffmpeg";
 import path from "path";
 import fs from "fs/promises";
 import Anthropic from "@anthropic-ai/sdk";
-import { ensureDir } from "../../src/lib/storage";
+import { ensureDir, getThumbnailPath } from "../../src/lib/storage";
+
+// Run an ffmpeg pipeline to extract a single frame at `time`.
+// `mode` controls whether -ss goes before -i (fast input seek) or after (slower output seek).
+// Output seek handles HEVC / sparse-keyframe MOVs that the fast path silently fails on.
+function extractOneFrame(
+  inputPath: string,
+  time: number,
+  framePath: string,
+  mode: "input-seek" | "output-seek"
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cmd = ffmpeg(inputPath);
+    if (mode === "input-seek") cmd.seekInput(time);
+    else cmd.seek(time);
+    cmd
+      .frames(1)
+      .outputOptions(["-vf", "scale=720:-1", "-q:v", "3"])
+      .output(framePath)
+      .on("end", () => resolve())
+      .on("error", (err) =>
+        reject(new Error(`ffmpeg ${mode}: ${err.message}`))
+      )
+      .run();
+  });
+}
 
 const anthropic = new Anthropic();
 
@@ -53,24 +78,38 @@ export async function generateClipName(
   });
 
   const framePaths: string[] = [];
+  let usedThumbnailFallback = false;
 
   try {
-    for (let i = 0; i < timepoints.length; i++) {
-      const framePath = path.join(tmpDir, `frame_${i.toString().padStart(2, "0")}.jpg`);
-      framePaths.push(framePath);
-
-      await new Promise<void>((resolve, reject) => {
-        ffmpeg(inputPath)
-          .seekInput(timepoints[i])
-          .frames(1)
-          .outputOptions(["-vf", "scale=720:-1", "-q:v", "3"])
-          .output(framePath)
-          .on("end", () => resolve())
-          .on("error", (err) =>
-            reject(new Error(`Frame extraction failed: ${err.message}`))
-          )
-          .run();
-      });
+    try {
+      for (let i = 0; i < timepoints.length; i++) {
+        const framePath = path.join(tmpDir, `frame_${i.toString().padStart(2, "0")}.jpg`);
+        try {
+          await extractOneFrame(inputPath, timepoints[i], framePath, "input-seek");
+        } catch {
+          // Sparse-keyframe / HEVC MOVs often need output-side seek
+          await extractOneFrame(inputPath, timepoints[i], framePath, "output-seek");
+        }
+        framePaths.push(framePath);
+      }
+    } catch (err) {
+      // Both seek strategies failed for at least one frame — fall back to
+      // analysing only the existing thumbnail (already on disk from ingest).
+      const thumb = path.resolve(getThumbnailPath(clipId));
+      try {
+        await fs.access(thumb);
+        for (const fp of framePaths) await fs.unlink(fp).catch(() => {});
+        framePaths.length = 0;
+        framePaths.push(thumb);
+        usedThumbnailFallback = true;
+        console.warn(
+          `[generateClipName] Falling back to thumbnail for ${clipId}: ${(err as Error).message}`
+        );
+      } catch {
+        throw new Error(
+          `Frame extraction failed and no thumbnail available: ${(err as Error).message}`
+        );
+      }
     }
 
     // Read frames as base64
@@ -102,7 +141,7 @@ export async function generateClipName(
             ...imageContents,
             {
               type: "text",
-              text: `These are ${frameCount} frames extracted in sequence from a video clip (evenly spaced from start to end). Analyze the full sequence as if you're watching the video.${transcriptBlock}
+              text: `These are ${imageContents.length} ${imageContents.length === 1 ? "frame" : "frames"} ${usedThumbnailFallback ? "(thumbnail only — multi-frame extraction failed)" : "extracted in sequence (evenly spaced from start to end)"} from a video clip. Analyze the full sequence as if you're watching the video.${transcriptBlock}
 
 Respond in EXACTLY this format:
 
@@ -186,9 +225,11 @@ Write naturally — this description will be used for search, so use the kind of
 
     return { name, description, shotType, tags, isTalkingToCamera };
   } finally {
-    // Clean up temp files
-    for (const fp of framePaths) {
-      await fs.unlink(fp).catch(() => {});
+    // Clean up temp files — but never delete the shared thumbnail when we fell back to it.
+    if (!usedThumbnailFallback) {
+      for (const fp of framePaths) {
+        await fs.unlink(fp).catch(() => {});
+      }
     }
     await fs.rmdir(tmpDir).catch(() => {});
   }
