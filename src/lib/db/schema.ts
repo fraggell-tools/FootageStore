@@ -10,6 +10,7 @@ import {
   pgEnum,
   jsonb,
   primaryKey,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("user_role", ["admin", "editor"]);
@@ -44,6 +45,7 @@ export const clips = pgTable("clips", {
   clientId: uuid("client_id")
     .notNull()
     .references(() => clients.id, { onDelete: "cascade" }),
+  code: varchar("code", { length: 12 }), // short, unique, shareable clip identifier
   name: varchar("name", { length: 500 }), // AI-generated short title
   description: text("description"), // AI-generated detailed scene description for search
   originalFilename: varchar("original_filename", { length: 500 }).notNull(),
@@ -66,7 +68,7 @@ export const clips = pgTable("clips", {
   uploadedBy: uuid("uploaded_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => [uniqueIndex("clips_code_unique").on(t.code)]);
 
 export const collections = pgTable("collections", {
   id: uuid("id").defaultRandom().primaryKey(),

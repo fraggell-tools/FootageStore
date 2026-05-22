@@ -17,6 +17,7 @@ interface Client {
 
 interface Clip {
   id: string;
+  code?: string | null;
   name: string | null;
   description?: string | null;
   clientId: string;
@@ -305,6 +306,7 @@ export default function ClientDetailPage() {
       if (searchTerms.length > 0) {
         const haystack = [
           clip.name || "",
+          clip.code || "",
           clip.originalFilename || "",
           clip.description || "",
           clip.shotType || "",

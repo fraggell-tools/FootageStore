@@ -4,6 +4,7 @@ import ClipCard from "./ClipCard";
 
 interface Clip {
   id: string;
+  code?: string | null;
   name: string | null;
   clientId: string;
   clientName: string;
