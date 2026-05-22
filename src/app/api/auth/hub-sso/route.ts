@@ -14,6 +14,13 @@ const ROLE_MAP: Record<string, "admin" | "editor"> = {
   creative_strategist: "editor",
 };
 
+function getPublicBase(req: NextRequest): string {
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  if (host) return `${proto}://${host}`;
+  return new URL(req.url).origin;
+}
+
 function verifyHubJwt(token: string) {
   const parts = token.split(".");
   if (parts.length !== 3) throw new Error("Malformed token");
@@ -36,10 +43,9 @@ function verifyHubJwt(token: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const callbackUrl = req.nextUrl.searchParams.get("callbackUrl") || "/clients";
-  const hubLoginUrl = `https://hub.fraggell.com/login?redirectTo=${encodeURIComponent(
-    new URL(callbackUrl, req.url).toString()
-  )}`;
+  const publicBase = getPublicBase(req);
+  const callbackUrl = req.nextUrl.searchParams.get("callbackUrl") || `${publicBase}/clients`;
+  const hubLoginUrl = `https://hub.fraggell.com/login?redirectTo=${encodeURIComponent(callbackUrl)}`;
 
   const hubToken = req.cookies.get("hub_auth")?.value;
   if (!hubToken) return NextResponse.redirect(hubLoginUrl);
@@ -69,7 +75,7 @@ export async function GET(req: NextRequest) {
         email: hubPayload.email,
         name: hubPayload.name,
         role: footageRole,
-        passwordHash: `sso:${hubPayload.sub}`, // not a valid bcrypt hash — SSO users can't use password login
+        passwordHash: `sso:${hubPayload.sub}`,
       })
       .returning();
   }
@@ -79,7 +85,7 @@ export async function GET(req: NextRequest) {
     ? "__Secure-authjs.session-token"
     : "authjs.session-token";
 
-  // Mint a NextAuth v5 session JWT — salt must match the cookie name
+  // Mint a NextAuth v5 session JWT
   const sessionToken = await encode({
     token: {
       sub: user.id,
@@ -92,13 +98,13 @@ export async function GET(req: NextRequest) {
     salt: cookieName,
   });
 
-  const response = NextResponse.redirect(new URL(callbackUrl, req.url));
+  const response = NextResponse.redirect(callbackUrl);
   response.cookies.set(cookieName, sessionToken, {
     httpOnly: true,
     secure: isSecure,
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 12, // 12 hours, matches hub token expiry
+    maxAge: 60 * 60 * 12,
   });
 
   return response;

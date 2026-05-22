@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
+function getPublicUrl(req: NextRequest): string {
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  if (host) {
+    return `${proto}://${host}${req.nextUrl.pathname}${req.nextUrl.search}`;
+  }
+  return req.url;
+}
+
 export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -10,7 +19,10 @@ export default async function middleware(req: NextRequest) {
     pathname.startsWith("/api/auth") ||
     pathname === "/login" ||
     pathname === "/favicon.ico" ||
-    pathname.match(/\.(svg|png|jpg|ico|js|css)$/)
+    pathname === "/panel-version.json" ||
+    pathname === "/install-panel.sh" ||
+    pathname === "/install-panel.bat" ||
+    pathname.match(/\.(svg|png|jpg|ico|js|css|json|sh|bat|zip)$/)
   ) {
     return NextResponse.next();
   }
@@ -29,17 +41,19 @@ export default async function middleware(req: NextRequest) {
   });
   if (token) return NextResponse.next();
 
+  const publicUrl = getPublicUrl(req);
+
   // No session — check for hub_auth cookie
   const hubToken = req.cookies.get("hub_auth")?.value;
   if (hubToken) {
-    const ssoUrl = new URL("/api/auth/hub-sso", req.url);
-    ssoUrl.searchParams.set("callbackUrl", req.url);
+    const ssoUrl = new URL("/api/auth/hub-sso", publicUrl);
+    ssoUrl.searchParams.set("callbackUrl", publicUrl);
     return NextResponse.redirect(ssoUrl);
   }
 
   // No hub token either — send to hub login
   return NextResponse.redirect(
-    `https://hub.fraggell.com/login?redirectTo=${encodeURIComponent(req.url)}`
+    `https://hub.fraggell.com/login?redirectTo=${encodeURIComponent(publicUrl)}`
   );
 }
 
