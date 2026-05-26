@@ -35,6 +35,8 @@ interface Clip {
   tags?: string[] | null;
   productSkus?: string[] | null;
   driveFileId?: string | null;
+  hasSpeech?: boolean | null;
+  transcript?: string | null;
 }
 
 interface Collection {
@@ -168,6 +170,7 @@ export default function ClientDetailPage() {
   const [selectedClipIds, setSelectedClipIds] = useState<Set<string>>(new Set());
   const bulkMode = selectedClipIds.size > 0;
   const [orientationFilter, setOrientationFilter] = useState<"all" | "horizontal" | "vertical">("all");
+  const [rollFilter, setRollFilter] = useState<"all" | "aroll" | "broll">("all");
   const [gridSize, setGridSize] = useState<GridSize>("medium");
   const [collections, setCollections] = useState<Collection[]>([]);
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
@@ -326,9 +329,13 @@ export default function ClientDetailPage() {
         orientationFilter === "all" ||
         (orientationFilter === "horizontal" && clip.width >= clip.height) ||
         (orientationFilter === "vertical" && clip.height > clip.width);
-      return matchesSearch && matchesShotType && matchesTags && matchesSkus && matchesOrientation;
+      const matchesRoll =
+        rollFilter === "all" ||
+        (rollFilter === "aroll" && clip.hasSpeech === true) ||
+        (rollFilter === "broll" && clip.hasSpeech === false);
+      return matchesSearch && matchesShotType && matchesTags && matchesSkus && matchesOrientation && matchesRoll;
     });
-  }, [clips, search, selectedShotTypes, selectedTags, selectedSkus, collectionClipIds, orientationFilter]);
+  }, [clips, search, selectedShotTypes, selectedTags, selectedSkus, collectionClipIds, orientationFilter, rollFilter]);
 
   const toggleShotType = useCallback((type: string) => {
     setSelectedShotTypes((prev) => {
@@ -369,6 +376,7 @@ export default function ClientDetailPage() {
     setSelectedSkus(new Set());
     setSearch("");
     setOrientationFilter("all");
+    setRollFilter("all");
     setActiveCollectionId(null);
     setCollectionClipIds(null);
   }, []);
@@ -692,6 +700,36 @@ export default function ClientDetailPage() {
               />
             )}
 
+            {/* A-Roll / B-Roll filter */}
+            <div className="flex items-center bg-surface border border-border rounded-lg p-0.5">
+              <button
+                onClick={() => setRollFilter("all")}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                  rollFilter === "all" ? "bg-accent text-white" : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setRollFilter("aroll")}
+                title="Talking-to-camera clips"
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                  rollFilter === "aroll" ? "bg-accent text-white" : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                A-Roll
+              </button>
+              <button
+                onClick={() => setRollFilter("broll")}
+                title="Everything else (b-roll, product shots, voiceover, etc.)"
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                  rollFilter === "broll" ? "bg-accent text-white" : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                B-Roll
+              </button>
+            </div>
+
             {/* Orientation filter */}
             <div className="flex items-center bg-surface border border-border rounded-lg p-0.5">
               <button
@@ -727,7 +765,7 @@ export default function ClientDetailPage() {
             </div>
 
             {/* Active filters & clear */}
-            {(selectedShotTypes.size > 0 || selectedTags.size > 0 || selectedSkus.size > 0 || orientationFilter !== "all") && (
+            {(selectedShotTypes.size > 0 || selectedTags.size > 0 || selectedSkus.size > 0 || orientationFilter !== "all" || rollFilter !== "all") && (
               <>
                 <span className="text-xs text-muted ml-1">
                   {[
@@ -735,6 +773,8 @@ export default function ClientDetailPage() {
                     selectedTags.size > 0 && `${selectedTags.size} tag${selectedTags.size > 1 ? "s" : ""}`,
                     selectedSkus.size > 0 && `${selectedSkus.size} SKU${selectedSkus.size > 1 ? "s" : ""}`,
                     orientationFilter !== "all" && orientationFilter,
+                    rollFilter === "aroll" && "A-Roll",
+                    rollFilter === "broll" && "B-Roll",
                   ].filter(Boolean).join(" + ")}
                 </span>
                 <button
@@ -830,7 +870,7 @@ export default function ClientDetailPage() {
       {filteredClips.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-muted">
-            {search || selectedShotTypes.size > 0 || selectedTags.size > 0 || selectedSkus.size > 0 || orientationFilter !== "all" || activeCollectionId
+            {search || selectedShotTypes.size > 0 || selectedTags.size > 0 || selectedSkus.size > 0 || orientationFilter !== "all" || rollFilter !== "all" || activeCollectionId
               ? "No clips match your filters"
               : "No clips uploaded yet"}
           </p>

@@ -92,6 +92,7 @@ docker compose up -d --build
 ## Environment Variables
 Lives at `/mnt/user/appdata/footagestore/app/.env` (or passed via compose environment, whichever pattern this repo uses). Required:
 - `ANTHROPIC_API_KEY` — Claude API key for video analysis
+- `OPENAI_API_KEY` — Whisper API key for audio transcription (worker only). If unset, transcription is skipped silently.
 - `NEXTAUTH_SECRET` — session secret
 - `NEXTAUTH_URL` — public URL
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` — Google Drive OAuth

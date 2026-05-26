@@ -64,6 +64,9 @@ export async function PATCH(
   if (body.productSkus !== undefined) {
     updates.productSkus = Array.isArray(body.productSkus) ? body.productSkus : null;
   }
+  if (body.hasSpeech !== undefined) {
+    updates.hasSpeech = typeof body.hasSpeech === "boolean" ? body.hasSpeech : null;
+  }
 
   if (Object.keys(updates).length <= 1) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });

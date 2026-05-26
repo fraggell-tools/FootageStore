@@ -14,6 +14,7 @@ import { extractMetadata } from "./extractMetadata";
 import { generateThumbnail } from "./generateThumbnail";
 import { generateSpriteSheet } from "./generateSpriteSheet";
 import { generateClipName } from "./generateClipName";
+import { transcribeAudio } from "./transcribeAudio";
 import { uploadFileToDrive } from "../../src/lib/gdrive";
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -23,6 +24,19 @@ const db = drizzle(pool);
 
 interface JobData {
   clipId: string;
+}
+
+// Force A-Roll/B-Roll to match the combined talking-to-camera decision.
+// AI sometimes returns both or neither — this normalises so the tag matches reality.
+function applyRollTag(
+  tags: string[] | null,
+  isTalkingToCamera: boolean
+): string[] {
+  const filtered = (tags ?? []).filter(
+    (t) => t.toLowerCase() !== "a-roll" && t.toLowerCase() !== "b-roll"
+  );
+  filtered.push(isTalkingToCamera ? "A-Roll" : "B-Roll");
+  return filtered;
 }
 
 export async function processClip(data: JobData): Promise<void> {
@@ -77,6 +91,8 @@ export async function processClip(data: JobData): Promise<void> {
     let clipDescription: string | null = null;
     let clipShotType: string | null = null;
     let clipTags: string[] | null = null;
+    let clipTranscript: string | null = null;
+    let clipHasSpeech: boolean | null = null;
     let thumbnailPath: string;
     let spritePath: string;
     let vttPath: string;
@@ -154,14 +170,41 @@ export async function processClip(data: JobData): Promise<void> {
       vttPath = getWebVTTPath(clipId);
       await generateSpriteSheet(inputPath, spritePath, vttPath, metadata.duration, metadata.width, metadata.height);
 
-      // 5. Generate AI scene analysis (name + description)
+      // 5. Transcribe audio (if OPENAI_API_KEY set)
+      // audioTalkingCandidate = audio side of the talking-to-camera gate
+      let audioTalkingCandidate = false;
+      if (process.env.OPENAI_API_KEY) {
+        console.log(`[processClip] Transcribing audio for ${clipId}`);
+        try {
+          const t = await transcribeAudio(inputPath, metadata.duration, clipId);
+          clipTranscript = t.transcript || null;
+          audioTalkingCandidate = t.hasSpeech;
+          console.log(
+            `[processClip] Transcript: ${t.wordCount} words, audio gate=${t.hasSpeech}`
+          );
+        } catch (err) {
+          console.warn(
+            `[processClip] Transcription failed for ${clipId}:`,
+            (err as Error).message
+          );
+        }
+      }
+
+      // 6. Generate AI scene analysis (name + description), feeding in transcript if any
       console.log(`[processClip] Analyzing scene for ${clipId}`);
+      let aiTalkingCandidate = false;
       try {
-        const analysis = await generateClipName(inputPath, metadata.duration, clipId);
+        const analysis = await generateClipName(
+          inputPath,
+          metadata.duration,
+          clipId,
+          clipTranscript ?? undefined
+        );
         clipName = analysis.name;
         clipDescription = analysis.description;
         clipShotType = analysis.shotType;
         clipTags = analysis.tags;
+        aiTalkingCandidate = analysis.isTalkingToCamera;
       } catch (err) {
         console.warn(
           `[processClip] AI analysis failed for ${clipId}, using filename:`,
@@ -169,6 +212,10 @@ export async function processClip(data: JobData): Promise<void> {
         );
         clipName = clip.originalFilename.replace(/\.[^.]+$/, "");
       }
+
+      // Combined gate: needs both sustained speech AND a face directly addressing camera.
+      clipHasSpeech = audioTalkingCandidate && aiTalkingCandidate;
+      clipTags = applyRollTag(clipTags, clipHasSpeech);
     }
 
     // 6. Handle Drive upload / cleanup
@@ -215,6 +262,8 @@ export async function processClip(data: JobData): Promise<void> {
         description: clipDescription,
         shotType: clipShotType,
         tags: clipTags,
+        transcript: clipTranscript,
+        hasSpeech: clipHasSpeech,
         thumbnailPath,
         spriteSheetPath: spritePath,
         webvttPath: vttPath,

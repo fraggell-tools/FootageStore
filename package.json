@@ -10,7 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "npx tsx src/lib/db/seed.ts",
-    "worker": "npx tsx worker/index.ts"
+    "worker": "npx tsx worker/index.ts",
+    "transcribe:backfill": "npx tsx worker/transcribeBackfill.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
