@@ -9,6 +9,7 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import { clients, clips } from "../src/lib/db/schema";
+import { generateUniqueClipCode } from "../src/lib/clipCode";
 import { listClientFolders, listFilesInFolder } from "../src/lib/gdrive";
 import { Queue } from "bullmq";
 import { createRedisConnection } from "../src/lib/redis";
@@ -122,6 +123,7 @@ async function sync() {
             try {
               await db.insert(clips).values({
                 id: clipId,
+                code: await generateUniqueClipCode(),
                 clientId: client.id,
                 name: null,
                 originalFilename: file.name,

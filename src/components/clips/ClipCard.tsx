@@ -4,6 +4,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 
 interface Clip {
   id: string;
+  code?: string | null;
   name: string | null;
   clientId: string;
   clientName: string;
@@ -313,9 +314,16 @@ export default function ClipCard({ clip, onSelect, isSelected, onToggleSelect, b
 
       {/* Clip name + metadata pills */}
       <div className="px-3 py-2.5 space-y-2">
-        <p className="text-sm text-neutral-300 truncate group-hover:text-white transition-colors">
-          {clip.name || clip.originalFilename}
-        </p>
+        <div className="flex items-baseline gap-2">
+          <p className="text-sm text-neutral-300 truncate group-hover:text-white transition-colors flex-1 min-w-0">
+            {clip.name || clip.originalFilename}
+          </p>
+          {clip.code && (
+            <span className="font-mono text-[10px] tracking-wider text-neutral-500 flex-shrink-0">
+              {clip.code}
+            </span>
+          )}
+        </div>
 
         {(clip.shotType || (clip.tags && clip.tags.length > 0) || (clip.productSkus && clip.productSkus.length > 0)) && (
           <div className="flex flex-wrap gap-1">

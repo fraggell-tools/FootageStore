@@ -3,6 +3,7 @@ import { clients, clips } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { listClientFolders, listFilesInFolder } from "@/lib/gdrive";
 import { getClipQueue } from "@/lib/queue";
+import { generateUniqueClipCode } from "@/lib/clipCode";
 
 export interface SyncResult {
   clientsCreated: number;
@@ -123,6 +124,7 @@ export async function syncFromDrive(): Promise<SyncResult> {
               const clipId = crypto.randomUUID();
               await db.insert(clips).values({
                 id: clipId,
+                code: await generateUniqueClipCode(),
                 clientId: client.id,
                 name: null,
                 originalFilename: file.name,

@@ -3,8 +3,9 @@
 import { useEffect, useCallback, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 
-interface Clip {
+export interface Clip {
   id: string;
+  code?: string | null;
   name: string | null;
   clientId: string;
   clientName: string;
@@ -92,6 +93,7 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
   const [newSku, setNewSku] = useState("");
   const [descExpanded, setDescExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const saveTags = useCallback(async (tags: string[]) => {
     setLocalTags(tags);
@@ -300,6 +302,47 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
 
           {/* Info side */}
           <div className={`${isPortrait ? "md:w-[50%]" : "md:w-[35%]"} p-5 flex flex-col gap-4 border-l border-white/5`}>
+            {/* Clip code — the short, shareable identifier */}
+            {clip.code && (
+              <div className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-accent/10 border border-accent/25">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted uppercase tracking-wider">Clip Code</p>
+                  <p className="text-accent font-mono font-semibold tracking-[0.2em] text-lg mt-0.5">
+                    {clip.code}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!clip.code) return;
+                    navigator.clipboard.writeText(clip.code);
+                    setCopiedCode(true);
+                    setTimeout(() => setCopiedCode(false), 2000);
+                  }}
+                  className={`text-[11px] flex items-center gap-1 px-2.5 py-1.5 rounded-md transition-all flex-shrink-0 ${
+                    copiedCode
+                      ? "bg-green-500/20 text-green-300 ring-1 ring-green-500/40"
+                      : "bg-accent/15 text-accent hover:bg-accent/25"
+                  }`}
+                >
+                  {copiedCode ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="font-medium">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <span className="font-medium">Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
             {/* Client & date */}
             <div className="flex items-center gap-2 text-sm text-muted">
               <span className="text-accent">{clip.clientName}</span>

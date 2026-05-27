@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clips } from "@/lib/db/schema";
+import { generateUniqueClipCode } from "@/lib/clipCode";
 import { getOriginalPath, ensureDir, getOriginalDir } from "@/lib/storage";
 import { getClipQueue } from "@/lib/queue";
 import { createWriteStream } from "fs";
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
     .insert(clips)
     .values({
       id: clipId,
+      code: await generateUniqueClipCode(),
       clientId,
       name: name || null,
       originalFilename: file.name,

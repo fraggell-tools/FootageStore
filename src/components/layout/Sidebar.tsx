@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useState } from "react";
 import ThemeToggle from "./ThemeToggle";
+import ClipDetailModal, { type Clip } from "@/components/clips/ClipDetailModal";
 
 const navItems = [
   {
@@ -54,9 +55,37 @@ export default function Sidebar() {
   const isAdmin = session?.user?.role === "admin";
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [codeInput, setCodeInput] = useState("");
+  const [looking, setLooking] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookedUpClip, setLookedUpClip] = useState<Clip | null>(null);
 
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + "/");
+  }
+
+  async function handleLookup(e: React.FormEvent) {
+    e.preventDefault();
+    const code = codeInput.trim();
+    if (!code || looking) return;
+    setLooking(true);
+    setLookupError(null);
+    try {
+      const res = await fetch(`/api/clips/lookup?code=${encodeURIComponent(code)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setLookedUpClip(data.clip as Clip);
+        setCodeInput("");
+      } else if (res.status === 404) {
+        setLookupError(`No clip found for "${code}"`);
+      } else {
+        setLookupError("Lookup failed — try again");
+      }
+    } catch {
+      setLookupError("Lookup failed — try again");
+    } finally {
+      setLooking(false);
+    }
   }
 
   return (
@@ -69,6 +98,50 @@ export default function Sidebar() {
         <span className="font-display font-semibold leading-none" style={{ fontSize: 17, letterSpacing: "-0.015em", color: "#F5F5F5" }}>Fraggell</span>
         <span className="font-display font-semibold leading-none" style={{ fontSize: 17, color: "#C60D60" }}>.</span>
         <span className="font-display font-medium leading-none" style={{ fontSize: 17, letterSpacing: "-0.015em", color: "#8F8F8F" }}>footage</span>
+      </div>
+
+      {/* Find a clip by its shareable code */}
+      <div className="px-3 py-3" style={{ borderBottom: "1px solid #2A2A2A" }}>
+        <form onSubmit={handleLookup}>
+          <div className="relative">
+            <svg
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              style={{ color: "#6F6F6F" }}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={codeInput}
+              onChange={(e) => {
+                setCodeInput(e.target.value.toUpperCase());
+                if (lookupError) setLookupError(null);
+              }}
+              placeholder="Find clip by code"
+              maxLength={12}
+              disabled={looking}
+              aria-label="Find a clip by its code"
+              className="w-full rounded-md pl-8 pr-3 py-1.5 text-sm transition-colors focus:outline-none disabled:opacity-50 placeholder:text-[#6F6F6F]"
+              style={{
+                background: "#1a1a1a",
+                border: "1px solid #2A2A2A",
+                color: "#F5F5F5",
+                fontFamily: "'Geist Mono', 'SF Mono', monospace",
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#C60D60"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#2A2A2A"; }}
+            />
+          </div>
+          {lookupError && (
+            <p className="mt-1.5 text-[11px] leading-snug" style={{ color: "#E0566F" }}>
+              {lookupError}
+            </p>
+          )}
+        </form>
       </div>
 
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
@@ -231,6 +304,13 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
+
+      {lookedUpClip && (
+        <ClipDetailModal
+          clip={lookedUpClip}
+          onClose={() => setLookedUpClip(null)}
+        />
+      )}
     </aside>
   );
 }

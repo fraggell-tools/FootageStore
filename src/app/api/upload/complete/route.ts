@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clips } from "@/lib/db/schema";
+import { generateUniqueClipCode } from "@/lib/clipCode";
 import { getClipQueue } from "@/lib/queue";
 import { randomUUID } from "crypto";
 
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
     .insert(clips)
     .values({
       id: clipId,
+      code: await generateUniqueClipCode(),
       clientId,
       name: null,
       originalFilename: fileName,
