@@ -38,7 +38,7 @@ Internal footage management and AI-analysis system for Fraggell Productions. Ing
   - `npm run db:generate` — generate from schema changes
   - `npm run db:migrate` — apply to DB
   - `npm run db:seed` — seed data
-- Migrations should be committed to the repo. Run `db:migrate` inside the app container (`docker exec footagestore-app-1 npm run db:migrate`) after deploys that include schema changes
+- Migrations should be committed to the repo. Run `db:migrate` inside the app container (`docker exec app-app-1 npm run db:migrate`) after deploys that include schema changes
 
 ## Docker Setup
 - Two Dockerfiles: `Dockerfile` (app) and `Dockerfile.worker` (worker)
@@ -53,7 +53,7 @@ Internal footage management and AI-analysis system for Fraggell Productions. Ing
 2. **Back up the Postgres database** BEFORE any deploy that includes a Drizzle migration:
    ```bash
    mkdir -p /mnt/user/backups/footagestore/$(date +%Y-%m-%d-%H%M)-pre-deploy
-   docker exec footagestore-db-1 pg_dump -U footagestore footagestore \
+   docker exec app-db-1 pg_dump -U footagestore footagestore \
      > /mnt/user/backups/footagestore/$(date +%Y-%m-%d-%H%M)-pre-deploy/footagestore.sql
    ```
    (Adjust container name if it differs — `docker ps --format '{{.Names}}' | grep footagestore` to find the real name.)
@@ -65,10 +65,10 @@ Internal footage management and AI-analysis system for Fraggell Productions. Ing
 3. `cd /mnt/user/appdata/footagestore/app`
 4. `git pull origin main`
 5. `docker compose up -d --build` — rebuilds both `app` and `worker`, restarts `db` + `redis` if their config changed
-6. If there are new migrations: `docker exec footagestore-app-1 npm run db:migrate` (use the actual container name)
+6. If there are new migrations: `docker exec app-app-1 npm run db:migrate` (use the actual container name)
 7. Verify:
-   - `docker logs footagestore-app-1 --tail 30` — look for "Ready" / server started on port 3700
-   - `docker logs footagestore-worker-1 --tail 30` — look for worker connected to Redis + Postgres
+   - `docker logs app-app-1 --tail 30` — look for "Ready" / server started on port 3700
+   - `docker logs app-worker-1 --tail 30` — look for worker connected to Redis + Postgres
    - `curl -s http://localhost:3700/ | head -5` — should return HTML, not an error
 
 ### Rollback
@@ -78,7 +78,7 @@ docker compose down
 # restore DB:
 docker compose up -d db
 sleep 5
-cat /mnt/user/backups/footagestore/<timestamp>-pre-deploy/footagestore.sql | docker exec -i footagestore-db-1 psql -U footagestore footagestore
+cat /mnt/user/backups/footagestore/<timestamp>-pre-deploy/footagestore.sql | docker exec -i app-db-1 psql -U footagestore footagestore
 # restore code:
 git reset --hard <previous-good-sha>
 docker compose up -d --build
