@@ -13,10 +13,14 @@ import { generateUniqueClipCode } from "../src/lib/clipCode";
 import { listClientFolders, listFilesInFolder } from "../src/lib/gdrive";
 import { Queue } from "bullmq";
 import { createRedisConnection } from "../src/lib/redis";
+import { HEALTH_KEYS } from "../src/lib/health";
 import { randomUUID } from "crypto";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
+
+// Dedicated connection for publishing sync health signals read by /api/health.
+const healthRedis = createRedisConnection();
 
 const SYNC_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
 
@@ -39,6 +43,8 @@ async function sync() {
     let clientsRemoved = 0;
     let clipsCreated = 0;
     let clipsRemoved = 0;
+    let clipInsertFailures = 0;
+    let lastInsertError = "";
 
     // Create clients for new folders
     for (const folder of driveFolders) {
@@ -137,6 +143,8 @@ async function sync() {
               clipsCreated++;
               console.log(`[Sync] New clip: ${file.name} (${client.name})`);
             } catch (err) {
+              clipInsertFailures++;
+              lastInsertError = (err as Error).message;
               console.error(`[Sync] Failed to create clip "${file.name}":`, (err as Error).message);
             }
           }
@@ -160,6 +168,14 @@ async function sync() {
     console.log(
       `[Sync] Done — clients: +${clientsCreated}/-${clientsRemoved}, clips: +${clipsCreated}/-${clipsRemoved}`
     );
+
+    // Publish health signals for /api/health (read by the Fraggell Monitor).
+    // insertFailuresLastRun resets to 0 on a clean run, so a recovered sync self-heals.
+    await healthRedis.set(HEALTH_KEYS.syncLastRunAt, Date.now().toString());
+    await healthRedis.set(HEALTH_KEYS.syncFailuresLastRun, clipInsertFailures.toString());
+    if (clipInsertFailures > 0) {
+      await healthRedis.set(HEALTH_KEYS.syncLastError, lastInsertError.slice(0, 300));
+    }
   } catch (err) {
     console.error("[Sync] Sync failed:", (err as Error).message);
   }
