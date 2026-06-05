@@ -169,6 +169,31 @@ export async function deleteFileFromDrive(fileId: string): Promise<void> {
 }
 
 /**
+ * Move a file into a different folder (e.g. reassigning a clip to another client).
+ * The Drive file id is stable across moves — only its parent folder changes.
+ */
+export async function moveFileToFolder(
+  fileId: string,
+  targetFolderId: string
+): Promise<void> {
+  const drive = getDrive();
+  // Remove the file from all of its current parents and add the target folder.
+  const meta = await drive.files.get({
+    fileId,
+    fields: "parents",
+    supportsAllDrives: true,
+  });
+  const previousParents = (meta.data.parents || []).join(",");
+  await drive.files.update({
+    fileId,
+    addParents: targetFolderId,
+    removeParents: previousParents,
+    supportsAllDrives: true,
+    fields: "id, parents",
+  });
+}
+
+/**
  * Get a readable stream of a file from Google Drive.
  */
 export async function downloadFileFromDrive(
