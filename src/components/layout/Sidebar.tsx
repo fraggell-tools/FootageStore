@@ -275,12 +275,21 @@ export default function Sidebar() {
       {/* User card */}
       <div className="p-3" style={{ borderTop: "1px solid #2A2A2A" }}>
         <div className="flex items-center gap-3 px-2 py-1.5">
-          <div
-            className="flex-shrink-0 flex items-center justify-center rounded-full text-white text-sm font-semibold"
-            style={{ width: 36, height: 36, background: "#C60D60" }}
-          >
-            {session?.user?.name?.[0] || "?"}
-          </div>
+          {session?.user?.image ? (
+            <img
+              src={session.user.image}
+              alt={session.user.name || ""}
+              className="flex-shrink-0 rounded-full object-cover"
+              style={{ width: 36, height: 36 }}
+            />
+          ) : (
+            <div
+              className="flex-shrink-0 flex items-center justify-center rounded-full text-white text-sm font-semibold"
+              style={{ width: 36, height: 36, background: "#C60D60" }}
+            >
+              {session?.user?.name?.[0] || "?"}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate" style={{ color: "#F5F5F5" }}>
               {session?.user?.name}

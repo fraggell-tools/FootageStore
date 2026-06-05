@@ -39,7 +39,7 @@ function verifyHubJwt(token: string) {
   if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
     throw new Error("Token expired");
   }
-  return payload as { sub: string; email: string; name: string; role: string };
+  return payload as { sub: string; email: string; name: string; role: string; avatarUrl?: string };
 }
 
 export async function GET(req: NextRequest) {
@@ -93,6 +93,7 @@ export async function GET(req: NextRequest) {
       email: user.email,
       role: user.role,
       id: user.id,
+      picture: hubPayload.avatarUrl || null,
     },
     secret: process.env.NEXTAUTH_SECRET!,
     salt: cookieName,
