@@ -4,6 +4,7 @@ import {
   text,
   varchar,
   integer,
+  bigint,
   boolean,
   timestamp,
   real,
@@ -50,7 +51,7 @@ export const clips = pgTable("clips", {
   description: text("description"), // AI-generated detailed scene description for search
   originalFilename: varchar("original_filename", { length: 500 }).notNull(),
   mimeType: varchar("mime_type", { length: 100 }).notNull(),
-  fileSize: integer("file_size").notNull(), // bytes
+  fileSize: bigint("file_size", { mode: "number" }).notNull(), // bytes — bigint: video files can exceed int4 max (~2.14GB)
   duration: real("duration"), // seconds
   width: integer("width"),
   height: integer("height"),
