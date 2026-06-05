@@ -28,13 +28,15 @@ interface BulkActionBarProps {
   onBulkAddToCollection: (collectionId: string) => Promise<boolean>;
   onCreateCollection: (name: string) => Promise<string | null>;
   onBulkDownload: () => void;
+  onBulkMove: (targetClientId: string) => Promise<void>;
   existingTags: string[];
   existingSkus: string[];
   selectedClips: SelectedClipSummary[];
   collections: { id: string; name: string; clipCount: number }[];
+  clients: { id: string; name: string }[];
 }
 
-type ActivePanel = null | "tags" | "skus" | "shotType" | "delete" | "collection";
+type ActivePanel = null | "tags" | "skus" | "shotType" | "delete" | "collection" | "move";
 
 // Given a list of clips and a set of known values, compute which values are
 // applied to ALL selected clips ("all"), SOME but not all ("some"), or none.
@@ -69,10 +71,12 @@ export default function BulkActionBar({
   onBulkAddToCollection,
   onCreateCollection,
   onBulkDownload,
+  onBulkMove,
   existingTags,
   existingSkus,
   selectedClips,
   collections,
+  clients,
 }: BulkActionBarProps) {
   const tagState = computeAppliedState(existingTags, selectedClips.map((c) => c.tags));
   const skuState = computeAppliedState(existingSkus, selectedClips.map((c) => c.productSkus));
@@ -90,6 +94,7 @@ export default function BulkActionBar({
   const [tagInput, setTagInput] = useState("");
   const [skuInput, setSkuInput] = useState("");
   const [newCollectionName, setNewCollectionName] = useState("");
+  const [moveSearch, setMoveSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -224,10 +229,25 @@ export default function BulkActionBar({
     [newCollectionName, onCreateCollection, selectedCount, showToast]
   );
 
+  const handleMove = useCallback(
+    async (clientId: string, clientName: string) => {
+      setLoading(true);
+      try {
+        await onBulkMove(clientId);
+        setActivePanel(null);
+        showToast(`Moved ${selectedCount} clip${selectedCount > 1 ? "s" : ""} to ${clientName}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onBulkMove, selectedCount, showToast]
+  );
+
   // Clear the confirmation message when the user switches panels
   useEffect(() => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(null);
+    setMoveSearch("");
   }, [activePanel]);
 
   return (
@@ -548,6 +568,62 @@ export default function BulkActionBar({
             </svg>
             Download
           </button>
+
+          {/* Move to client */}
+          <div className="relative">
+            <button
+              onClick={() => setActivePanel(activePanel === "move" ? null : "move")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                activePanel === "move" ? "bg-blue-500 text-white" : "text-neutral-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+              </svg>
+              Move
+            </button>
+            {activePanel === "move" && (
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-[#252525] border border-white/10 rounded-xl p-3 shadow-xl w-72">
+                <p className="text-[11px] text-muted uppercase tracking-wider mb-2">
+                  Move {selectedCount} clip{selectedCount > 1 ? "s" : ""} to client
+                </p>
+                <input
+                  type="text"
+                  value={moveSearch}
+                  onChange={(e) => setMoveSearch(e.target.value)}
+                  placeholder="Search clients..."
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500 mb-2"
+                  autoFocus
+                />
+                <div className="flex flex-col gap-1 max-h-52 overflow-y-auto">
+                  {clients
+                    .filter((c) => c.name.toLowerCase().includes(moveSearch.toLowerCase().trim()))
+                    .map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => handleMove(c.id, c.name)}
+                        disabled={loading}
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50 flex items-center gap-2 text-neutral-300 hover:text-white hover:bg-blue-500/15"
+                      >
+                        <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                        </svg>
+                        <span className="truncate">{c.name}</span>
+                      </button>
+                    ))}
+                  {clients.filter((c) => c.name.toLowerCase().includes(moveSearch.toLowerCase().trim())).length === 0 && (
+                    <p className="text-xs text-neutral-500 px-2.5 py-1.5">No clients found</p>
+                  )}
+                </div>
+                <p className="text-[10px] text-neutral-500 mt-2 flex items-center gap-1">
+                  <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Also moves the files in Google Drive.
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Delete */}
           <div className="relative">

@@ -161,6 +161,7 @@ export default function ClientDetailPage() {
   const slug = params.slug as string;
 
   const [client, setClient] = useState<Client | null>(null);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [clips, setClips] = useState<Clip[]>([]);
   const [search, setSearch] = useState("");
   const [selectedShotTypes, setSelectedShotTypes] = useState<Set<string>>(new Set());
@@ -197,6 +198,7 @@ export default function ClientDetailPage() {
         if (!clientRes.ok) return;
         const clientData = await clientRes.json();
         const list = Array.isArray(clientData) ? clientData : clientData.clients || [];
+        setAllClients(list);
         const foundClient = list.find((c: Client) => c.slug === slug);
         if (!foundClient) return;
         setClient(foundClient);
@@ -498,6 +500,20 @@ export default function ClientDetailPage() {
       body: JSON.stringify({ clipIds }),
     });
     if (res.ok) {
+      setClips((prev) => prev.filter((c) => !selectedClipIds.has(c.id)));
+      setSelectedClipIds(new Set());
+    }
+  }, [selectedClipIds]);
+
+  const handleBulkMove = useCallback(async (targetClientId: string) => {
+    const clipIds = Array.from(selectedClipIds);
+    const res = await fetch("/api/clips/bulk-move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clipIds, targetClientId }),
+    });
+    if (res.ok) {
+      // Moved clips now belong to another client — drop them from this view.
       setClips((prev) => prev.filter((c) => !selectedClipIds.has(c.id)));
       setSelectedClipIds(new Set());
     }
@@ -908,9 +924,11 @@ export default function ClientDetailPage() {
           onBulkAddToCollection={handleBulkAddToCollection}
           onCreateCollection={handleCreateCollection}
           onBulkDownload={handleBulkDownload}
+          onBulkMove={handleBulkMove}
           existingTags={allTags.map(([tag]) => tag)}
           existingSkus={allSkus.map(([sku]) => sku)}
           collections={collections}
+          clients={allClients.filter((c) => c.id !== client?.id)}
           selectedClips={clips.filter((c) => selectedClipIds.has(c.id)).map((c) => ({
             id: c.id,
             tags: c.tags || [],
