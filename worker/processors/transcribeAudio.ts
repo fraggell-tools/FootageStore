@@ -35,10 +35,12 @@ export interface TranscriptResult {
   costUsd: number;
 }
 
-// Whisper API: $0.006/min. Audio gate is intentionally strict — sustained speech (~1.5 words/sec)
-// is typical of talking-to-camera; lower rates are usually overheard chatter or voice in b-roll.
-// The visual half of the gate happens in generateClipName.ts.
-const WHISPER_PRICE_PER_MINUTE = 0.006;
+// Transcription via OpenAI gpt-4o-mini-transcribe (~$0.003/min — half of whisper-1's $0.006,
+// for ~5-10% higher word-error-rate, acceptable for the words/sec speech gate). Audio gate is
+// intentionally strict — sustained speech (~1.5 words/sec) is typical of talking-to-camera; lower
+// rates are usually overheard chatter or voice in b-roll. The visual half is in generateClipName.ts.
+const TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
+const TRANSCRIBE_PRICE_PER_MINUTE = 0.003; // approximate; the model bills per audio token
 const SPEECH_WPS_THRESHOLD = 1.5;
 
 export async function transcribeAudio(
@@ -102,7 +104,7 @@ export async function transcribeAudio(
       new Blob([new Uint8Array(audioBuffer)], { type: "audio/mpeg" }),
       "audio.mp3"
     );
-    formData.append("model", "whisper-1");
+    formData.append("model", TRANSCRIBE_MODEL);
     formData.append("response_format", "text");
     formData.append("language", "en");
 
@@ -114,7 +116,7 @@ export async function transcribeAudio(
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`Whisper API ${res.status}: ${body.slice(0, 300)}`);
+      throw new Error(`Transcription API ${res.status}: ${body.slice(0, 300)}`);
     }
 
     const rawTranscript = (await res.text()).trim();
@@ -124,7 +126,7 @@ export async function transcribeAudio(
     // Below the threshold the transcript is usually a Whisper hallucination on music/silence.
     // Drop it so we don't pollute the search index with garbage.
     const transcript = hasSpeech ? rawTranscript : "";
-    const costUsd = (duration / 60) * WHISPER_PRICE_PER_MINUTE;
+    const costUsd = (duration / 60) * TRANSCRIBE_PRICE_PER_MINUTE;
 
     return { transcript, hasSpeech, wordCount, durationUsed: duration, costUsd };
   } finally {

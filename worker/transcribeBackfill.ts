@@ -1,22 +1,32 @@
 /**
  * Backfill script: transcribes audio + re-runs AI scene analysis on existing clips,
- * applying the new combined talking-to-camera gate and A-Roll/B-Roll tagging.
+ * applying the combined talking-to-camera gate and A-Roll/B-Roll tagging.
  *
  * Dry-run by default. Use --save to persist to DB.
  *
- *   --limit N     Max clips to process (default 5)
- *   --client SLUG Only clips for this client slug
- *   --save        Write transcript, has_speech, tags, name, description, shot_type
- *   --all         Process every video clip without has_speech set yet (use with --save)
+ *   --limit N      Max clips to process (default 5)
+ *   --client SLUG  Only clips for this client slug
+ *   --save         Write transcript, has_speech, tags, name, description, shot_type
+ *   --all          Process every matching clip (use with --save)
+ *   --since DATE   Re-run clips wrongly forced to B-Roll during a transcription outage:
+ *                  selects has_speech = false with updated_at >= DATE (instead of the
+ *                  default has_speech IS NULL).
+ *   --until DATE   Upper bound on updated_at (exclusive). Pair with --since to keep the
+ *                  run idempotent/resumable — re-processed clips get a fresh updated_at
+ *                  and drop out of the window next time.
  *
  * Examples:
- *   npx tsx worker/transcribeBackfill.ts                          # dry-run, 5 random
+ *   npx tsx worker/transcribeBackfill.ts                          # dry-run, 5 random (has_speech NULL)
  *   npx tsx worker/transcribeBackfill.ts --limit 20 --save        # save 20 to DB
- *   npx tsx worker/transcribeBackfill.ts --all --save             # full backfill
+ *   npx tsx worker/transcribeBackfill.ts --all --save             # full backfill (has_speech NULL)
+ *   npx tsx worker/transcribeBackfill.ts --since 2026-05-24 --until 2026-06-17 --limit 5
+ *                                                                 # dry-run the outage re-tag
+ *   npx tsx worker/transcribeBackfill.ts --since 2026-05-24 --until 2026-06-17 --all --save
+ *                                                                 # re-tag the ~3,159 outage clips
  */
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
@@ -34,16 +44,20 @@ interface Args {
   clientSlug: string | null;
   save: boolean;
   all: boolean;
+  since: string | null;
+  until: string | null;
 }
 
 function parseArgs(argv: string[]): Args {
-  const out: Args = { limit: 5, clientSlug: null, save: false, all: false };
+  const out: Args = { limit: 5, clientSlug: null, save: false, all: false, since: null, until: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--limit") out.limit = parseInt(argv[++i], 10);
     else if (a === "--client") out.clientSlug = argv[++i];
     else if (a === "--save") out.save = true;
     else if (a === "--all") out.all = true;
+    else if (a === "--since") out.since = argv[++i];
+    else if (a === "--until") out.until = argv[++i];
   }
   return out;
 }
@@ -68,10 +82,22 @@ async function main() {
 
   const conditions = [
     eq(clips.status, "ready"),
-    isNull(clips.hasSpeech),
     sql`${clips.duration} IS NOT NULL AND ${clips.duration} > 0`,
     sql`${clips.mimeType} LIKE 'video/%'`,
   ];
+
+  // Target selection:
+  //  - default: clips that never had the talking-to-camera gate computed (has_speech IS NULL).
+  //  - --since DATE [--until DATE]: re-run clips wrongly forced to B-Roll during a transcription
+  //    outage (has_speech = false within the window). Pass --until to keep re-runs idempotent —
+  //    clips re-processed this run get a fresh updated_at and fall outside the window next time.
+  if (args.since) {
+    conditions.push(eq(clips.hasSpeech, false));
+    conditions.push(gte(clips.updatedAt, new Date(args.since)));
+    if (args.until) conditions.push(lt(clips.updatedAt, new Date(args.until)));
+  } else {
+    conditions.push(isNull(clips.hasSpeech));
+  }
 
   if (args.clientSlug) {
     const [client] = await db
