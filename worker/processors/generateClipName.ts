@@ -19,7 +19,7 @@ function extractOneFrame(
     else cmd.seek(time);
     cmd
       .frames(1)
-      .outputOptions(["-vf", "scale=720:-1", "-q:v", "3"])
+      .outputOptions(["-vf", "scale=576:-1", "-q:v", "3"])
       .output(framePath)
       .on("end", () => resolve())
       .on("error", (err) =>
@@ -31,8 +31,11 @@ function extractOneFrame(
 
 const anthropic = new Anthropic();
 
-const MAX_FRAME_COUNT = 12;
-// Aim for ~4 frames per second; ffmpeg can't reliably seek to 12 evenly-spaced
+// 8 frames @ 576px wide (set in extractOneFrame) keeps Haiku vision cost ~half of
+// the old 12 @ 720px, while leaving enough temporal coverage for the talking-to-camera
+// gate (which needs lip movement visible across multiple frames).
+const MAX_FRAME_COUNT = 8;
+// Aim for ~4 frames per second; ffmpeg can't reliably seek to many evenly-spaced
 // frames in a 1-second clip, which was causing every ultra-short clip to fail.
 function pickFrameCount(duration: number): number {
   return Math.min(MAX_FRAME_COUNT, Math.max(2, Math.floor(duration * 4)));
