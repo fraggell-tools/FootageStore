@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs/promises";
 import { execFileSync } from "child_process";
 import { ensureDir } from "../../src/lib/storage";
+import { sendSlackAlert } from "../../src/lib/slackAlert";
 
 function hasAudioStream(inputPath: string): boolean {
   try {
@@ -42,6 +43,12 @@ export interface TranscriptResult {
 const TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
 const TRANSCRIBE_PRICE_PER_MINUTE = 0.003; // approximate; the model bills per audio token
 const SPEECH_WPS_THRESHOLD = 1.5;
+
+// Systemic transcription failures (bad key / exhausted quota) silently force every clip to
+// B-Roll — the exact outage that went unnoticed for weeks. Alert to Slack, at most once per
+// cooldown window so a sustained outage doesn't spam the channel.
+const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+let lastTranscriptionAlertAt = 0;
 
 export async function transcribeAudio(
   inputPath: string,
@@ -116,6 +123,21 @@ export async function transcribeAudio(
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      if (
+        [401, 403, 429].includes(res.status) &&
+        Date.now() - lastTranscriptionAlertAt > ALERT_COOLDOWN_MS
+      ) {
+        lastTranscriptionAlertAt = Date.now();
+        const hint =
+          res.status === 429
+            ? "Likely OpenAI quota/billing exhausted — check platform.openai.com → Billing."
+            : "Auth/permission failure — check OPENAI_API_KEY.";
+        await sendSlackAlert("⚠️ FootageStore transcription is failing", [
+          `OpenAI transcription returned *HTTP ${res.status}* — new clips are being tagged *B-Roll* with no transcript, so A-Roll detection is effectively down.`,
+          `\`${body.slice(0, 200)}\``,
+          hint,
+        ]);
+      }
       throw new Error(`Transcription API ${res.status}: ${body.slice(0, 300)}`);
     }
 

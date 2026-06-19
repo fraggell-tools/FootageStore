@@ -49,6 +49,8 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN}
       - GOOGLE_DRIVE_PARENT_FOLDER_ID=${GOOGLE_DRIVE_PARENT_FOLDER_ID}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_USER_IDS=${SLACK_USER_IDS}
     volumes:
       - /mnt/user/appdata/footagestore/data:/data
     depends_on:
