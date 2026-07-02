@@ -123,6 +123,12 @@ Lives at `/mnt/user/appdata/footagestore/app/.env` (or passed via compose enviro
 - `deploy-webhook/` — subsystem that receives GH webhooks to trigger deploys (separate service)
 - `drizzle.config.ts` — Drizzle kit config
 
+## Premiere Pro CEP Panel
+- **The panel's source code is NOT in this repo.** The app only serves a pre-built zip from `/data/panel/panel.zip` on the server.
+- Serving endpoints: `src/app/api/panel/download/` (panel zip) plus the plugin auth route under `src/app/api/auth/`.
+- Version advertised to clients: `public/panel-version.json`.
+- To change panel behaviour: locate the external panel source, rebuild, zip, drop at `/data/panel/panel.zip`, bump `panel-version.json`. Don't spend a session searching this repo for panel UI code, it isn't here.
+
 ## Backups
 - Folder: `/mnt/user/backups/footagestore/YYYY-MM-DD-HHMM-<label>/`
 - Postgres backups via `pg_dump`, NOT filesystem copies — the Postgres data dir is a live database and can't be safely `cp`'d
