@@ -21,7 +21,7 @@ describe("withDriveRetry", () => {
   });
 
   it("retries retryable errors with growing backoff, then succeeds", async () => {
-    const sleep = vi.fn(async () => {});
+    const sleep = vi.fn(async (_ms: number) => {});
     let calls = 0;
     const result = await withDriveRetry(
       async () => {
