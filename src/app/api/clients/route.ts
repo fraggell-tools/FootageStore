@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { clients, clips } from "@/lib/db/schema";
 import { eq, sql, count } from "drizzle-orm";
 import { createClientFolder } from "@/lib/gdrive";
+import { rootErrorMessage } from "@/lib/dbError";
 
 export async function GET() {
   const session = await auth();
@@ -46,6 +47,18 @@ export async function POST(request: NextRequest) {
     .replace(/^-|-$/g, "");
 
   try {
+    // Check for an existing client BEFORE creating the Drive folder — a failed
+    // insert after folder creation leaves an orphan duplicate folder in Drive,
+    // which the sync then turns into a duplicate client.
+    const [existing] = await db
+      .select({ id: clients.id })
+      .from(clients)
+      .where(eq(clients.slug, slug))
+      .limit(1);
+    if (existing) {
+      return NextResponse.json({ error: "A client with that name already exists" }, { status: 409 });
+    }
+
     // Create folder in Google Drive
     let driveFolderId: string | null = null;
     try {
@@ -61,10 +74,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(client, { status: 201 });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+    // Drizzle wraps pg errors ("Failed query: <sql>") — classify on the root cause.
+    const message = rootErrorMessage(err);
     if (message.includes("unique") || message.includes("duplicate")) {
       return NextResponse.json({ error: "A client with that name already exists" }, { status: 409 });
     }
+    console.error("[Clients API] Create failed:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
