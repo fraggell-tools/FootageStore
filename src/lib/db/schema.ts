@@ -98,3 +98,36 @@ export const collectionClips = pgTable(
   },
   (t) => [primaryKey({ columns: [t.collectionId, t.clipId] })]
 );
+
+export const importStatusEnum = pgEnum("import_status", [
+  "pending",
+  "running",
+  "completed",
+  "completed_with_errors",
+  "error",
+]);
+
+export type ImportSelection = {
+  folders: { id: string; name: string }[];
+  files: { id: string; name: string }[];
+};
+
+export type ImportError = { fileName: string; path: string; message: string };
+
+export const imports = pgTable("imports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clientId: uuid("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  sourceFolderId: varchar("source_folder_id", { length: 255 }).notNull(),
+  sourceFolderName: varchar("source_folder_name", { length: 500 }).notNull(),
+  selection: jsonb("selection").$type<ImportSelection>().notNull(),
+  status: importStatusEnum("status").notNull().default("pending"),
+  totalFiles: integer("total_files").notNull().default(0),
+  copiedFiles: integer("copied_files").notNull().default(0),
+  skippedFiles: integer("skipped_files").notNull().default(0),
+  errors: jsonb("errors").$type<ImportError[]>(),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
