@@ -15,6 +15,7 @@ interface BrowseFolder {
 interface TreeNode extends BrowseFolder {
   loaded: boolean;
   expanded: boolean;
+  loadError: boolean;
   folders: TreeNode[];
   files: BrowseFile[];
 }
@@ -31,11 +32,26 @@ interface ImportStatus {
   errors: { fileName: string; path: string; message: string }[] | null;
 }
 
+const mono: React.CSSProperties = {
+  fontFamily: "'Geist Mono', 'SF Mono', monospace",
+};
+const eyebrow: React.CSSProperties = {
+  ...mono,
+  fontSize: "0.6875rem",
+  fontWeight: 500,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+};
+
 function formatBytes(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(0)} KB`;
-  return `${n} B`;
+  return n > 0 ? `${n} B` : "";
+}
+
+function newNode(f: BrowseFolder): TreeNode {
+  return { ...f, loaded: false, expanded: false, loadError: false, folders: [], files: [] };
 }
 
 async function browse(body: { link?: string; folderId?: string }) {
@@ -49,12 +65,97 @@ async function browse(body: { link?: string; folderId?: string }) {
   return data as { folder: BrowseFolder; folders: BrowseFolder[]; files: BrowseFile[] };
 }
 
+/* ── Icons ──────────────────────────────────────────────────── */
+
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`w-3.5 h-3.5 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth={2.5} className="opacity-20" />
+      <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <svg className="w-4 h-4 flex-shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+    </svg>
+  );
+}
+
+function FilmIcon() {
+  return (
+    <svg className="w-4 h-4 flex-shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Checkbox({
+  checked,
+  disabled,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  return (
+    <label className={`relative flex-shrink-0 ${disabled ? "cursor-default" : "cursor-pointer"}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+        aria-label={label}
+        className="peer sr-only"
+      />
+      <span
+        className={`flex items-center justify-center w-4 h-4 rounded border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-1 ${
+          checked
+            ? disabled
+              ? "bg-accent/40 border-transparent"
+              : "bg-accent border-transparent"
+            : "bg-transparent border-border hover:border-muted"
+        }`}
+      >
+        {checked && (
+          <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+      </span>
+    </label>
+  );
+}
+
+/* ── Page ───────────────────────────────────────────────────── */
+
 export default function ImportPage() {
   const [link, setLink] = useState("");
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [root, setRoot] = useState<TreeNode | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [clientId, setClientId] = useState("");
   const [newClientName, setNewClientName] = useState("");
@@ -85,10 +186,10 @@ export default function ImportPage() {
     try {
       const data = await browse({ link: link.trim() });
       setRoot({
-        ...data.folder,
+        ...newNode(data.folder),
         loaded: true,
         expanded: true,
-        folders: data.folders.map((f) => ({ ...f, loaded: false, expanded: false, folders: [], files: [] })),
+        folders: data.folders.map(newNode),
         files: data.files,
       });
     } catch (err) {
@@ -100,14 +201,25 @@ export default function ImportPage() {
 
   async function toggleExpand(node: TreeNode) {
     if (!node.loaded) {
+      setLoadingIds((s) => new Set(s).add(node.id));
       try {
         const data = await browse({ folderId: node.id });
-        node.folders = data.folders.map((f) => ({ ...f, loaded: false, expanded: false, folders: [], files: [] }));
+        node.folders = data.folders.map(newNode);
         node.files = data.files;
         node.loaded = true;
+        node.loadError = false;
+        node.expanded = true;
       } catch {
-        return; // leave collapsed; user can retry
+        node.loadError = true;
+      } finally {
+        setLoadingIds((s) => {
+          const next = new Set(s);
+          next.delete(node.id);
+          return next;
+        });
+        setRoot((r) => (r ? { ...r } : r));
       }
+      return;
     }
     node.expanded = !node.expanded;
     setRoot((r) => (r ? { ...r } : r));
@@ -132,7 +244,7 @@ export default function ImportPage() {
     function walk(n: TreeNode) {
       if (checked.has(n.id)) {
         folders.push({ id: n.id, name: n.name });
-        return; // whole subtree included — don't descend
+        return;
       }
       for (const f of n.files) if (checked.has(f.id)) files.push({ id: f.id, name: f.name });
       for (const sub of n.folders) walk(sub);
@@ -185,7 +297,7 @@ export default function ImportPage() {
     if (!root || !clientId || starting) return;
     const selection = collectSelection(root);
     if (selection.folders.length === 0 && selection.files.length === 0) {
-      setStartError("Select at least one folder or file");
+      setStartError("Select at least one folder or file first");
       return;
     }
     setStarting(true);
@@ -219,201 +331,247 @@ export default function ImportPage() {
     }
   }
 
+  /* ── Tree rendering ─────────────────────────────────────── */
+
   function renderFolder(node: TreeNode, depth: number, ancestorChecked: boolean) {
     const isChecked = ancestorChecked || checked.has(node.id);
+    const isLoading = loadingIds.has(node.id);
     return (
       <div key={node.id}>
-        <div className="flex items-center gap-2 py-1" style={{ paddingLeft: depth * 20 }}>
-          <input
-            type="checkbox"
+        <div className="group flex items-center gap-2.5 h-8 px-2 rounded-md hover:bg-surface-hover transition-colors">
+          <Checkbox
             checked={isChecked}
             disabled={ancestorChecked}
             onChange={() => toggleChecked(node.id)}
-            className="accent-[#C60D60]"
-            aria-label={`Select folder ${node.name}`}
+            label={`Select folder ${node.name}`}
           />
           <button
             type="button"
             onClick={() => toggleExpand(node)}
-            className="flex items-center gap-1.5 text-sm text-neutral-200 hover:text-white"
+            className="flex items-center gap-1.5 min-w-0 flex-1 text-left text-sm text-fg"
+            aria-expanded={node.expanded}
           >
-            <span className="text-xs text-neutral-500">{node.expanded ? "▾" : "▸"}</span>
-            <span>📁 {node.name}</span>
+            <span className="text-muted">{isLoading ? <SpinnerIcon /> : <ChevronIcon expanded={node.expanded} />}</span>
+            <FolderIcon />
+            <span className="truncate">{node.name}</span>
+            {node.loadError && (
+              <span className="text-xs text-red-500 flex-shrink-0">Couldn&apos;t load — click to retry</span>
+            )}
           </button>
         </div>
         {node.expanded && (
-          <>
+          <div className="ml-[27px] pl-2 border-l border-border">
             {node.folders.map((sub) => renderFolder(sub, depth + 1, isChecked))}
             {node.files.map((file) => {
               const fileChecked = isChecked || checked.has(file.id);
               return (
                 <div
                   key={file.id}
-                  className="flex items-center gap-2 py-0.5"
-                  style={{ paddingLeft: (depth + 1) * 20 }}
+                  className="group flex items-center gap-2.5 h-8 px-2 rounded-md hover:bg-surface-hover transition-colors"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={fileChecked}
                     disabled={isChecked}
                     onChange={() => toggleChecked(file.id)}
-                    className="accent-[#C60D60]"
-                    aria-label={`Select file ${file.name}`}
+                    label={`Select file ${file.name}`}
                   />
-                  <span className="text-sm text-neutral-400 truncate">
-                    🎬 {file.name}
-                    <span className="ml-2 text-xs text-neutral-600">{formatBytes(file.size)}</span>
+                  <FilmIcon />
+                  <span className="truncate flex-1 text-sm text-fg">{file.name}</span>
+                  <span className="text-xs text-muted tabular-nums flex-shrink-0" style={mono}>
+                    {formatBytes(file.size)}
                   </span>
                 </div>
               );
             })}
             {node.loaded && node.folders.length === 0 && node.files.length === 0 && (
-              <p className="text-xs text-neutral-600" style={{ paddingLeft: (depth + 1) * 20 }}>
-                empty
-              </p>
+              <p className="h-8 flex items-center px-2 text-xs text-muted">This folder is empty</p>
             )}
-          </>
+          </div>
         )}
       </div>
     );
   }
 
+  const selection = root ? collectSelection(root) : { folders: [], files: [] };
+  const selectionCount = selection.folders.length + selection.files.length;
   const running = importStatus && (importStatus.status === "pending" || importStatus.status === "running");
+  const progressDone = importStatus
+    ? importStatus.copiedFiles + importStatus.skippedFiles + (importStatus.errors?.length || 0)
+    : 0;
 
   return (
     <div className="p-8 max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Import from Drive</h1>
-        <p className="text-sm text-neutral-400 mt-1">
-          Paste a link to an external Google Drive folder that&apos;s been shared with us. Select what
-          to import and it will be copied into a client folder, then ingested automatically.
+      <div className="mb-8">
+        <h1 className="font-display text-2xl font-semibold text-fg">Import from Drive</h1>
+        <p className="text-sm text-muted mt-1.5 max-w-xl">
+          Paste a link to a Google Drive folder that&apos;s been shared with us, choose what to bring
+          in, and it&apos;s copied into a client folder — then picked up by the library automatically.
         </p>
       </div>
 
-      <form onSubmit={handleResolve} className="flex gap-2 mb-4">
+      {/* Source */}
+      <p className="text-muted mb-2" style={eyebrow}>
+        Source folder
+      </p>
+      <form onSubmit={handleResolve} className="flex gap-2 mb-6">
         <input
           type="text"
           value={link}
           onChange={(e) => setLink(e.target.value)}
           placeholder="https://drive.google.com/drive/folders/…"
-          className="flex-1 bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-accent"
+          className="flex-1 bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-fg placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors"
+          style={mono}
         />
         <button
           type="submit"
           disabled={resolving || !link.trim()}
-          className="px-5 py-2.5 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-          style={{ background: "#C60D60" }}
+          className="px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:hover:bg-accent transition-colors"
         >
-          {resolving ? "Opening…" : "Open"}
+          {resolving ? "Opening…" : "Open folder"}
         </button>
       </form>
-      {resolveError && <p className="text-sm text-red-400 mb-4">{resolveError}</p>}
+      {resolveError && (
+        <div className="flex items-start gap-2 mb-6 -mt-3 text-sm text-red-500">
+          <svg className="w-4 h-4 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <span>{resolveError}</span>
+        </div>
+      )}
 
+      {/* Select */}
       {root && (
         <>
-          <div className="bg-surface border border-border rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
-            {renderFolder(root, 0, false)}
+          <div className="bg-surface border border-border rounded-xl overflow-hidden mb-6">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-2 min-w-0">
+                <FolderIcon />
+                <span className="text-sm font-medium text-fg truncate">{root.name}</span>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <span className="text-xs text-muted tabular-nums" style={mono}>
+                  {selectionCount === 0
+                    ? "Nothing selected"
+                    : [
+                        selection.folders.length > 0 &&
+                          `${selection.folders.length} folder${selection.folders.length === 1 ? "" : "s"}`,
+                        selection.files.length > 0 &&
+                          `${selection.files.length} file${selection.files.length === 1 ? "" : "s"}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggleChecked(root.id)}
+                  className="text-xs font-medium text-accent hover:underline"
+                >
+                  {checked.has(root.id) ? "Clear selection" : "Select everything"}
+                </button>
+              </div>
+            </div>
+            <div className="p-2 max-h-96 overflow-y-auto">{renderFolder(root, 0, false)}</div>
           </div>
 
-          <div className="flex items-end gap-3 mb-4 flex-wrap">
-            <div>
-              <label className="block text-xs text-neutral-500 mb-1">Destination client</label>
-              <select
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                className="bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent appearance-none"
-              >
-                <option value="">Choose a client…</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-end gap-2">
-              <div>
-                <label className="block text-xs text-neutral-500 mb-1">…or create new</label>
-                <input
-                  type="text"
-                  value={newClientName}
-                  onChange={(e) => setNewClientName(e.target.value)}
-                  placeholder="New client name"
-                  className="bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-accent"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={handleCreateClient}
-                disabled={creatingClient || !newClientName.trim()}
-                className="px-4 py-2.5 rounded-lg text-sm border border-border text-neutral-300 disabled:opacity-50"
-              >
-                {creatingClient ? "Creating…" : "Create"}
-              </button>
-            </div>
+          {/* Destination */}
+          <p className="text-muted mb-2" style={eyebrow}>
+            Destination
+          </p>
+          <div className="flex items-center gap-2 mb-6 flex-wrap">
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              className="bg-surface border border-border rounded-lg px-4 py-2.5 pr-9 text-sm text-fg focus:outline-none focus:border-accent transition-colors appearance-none"
+            >
+              <option value="">Choose a client…</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-muted px-1">or</span>
+            <input
+              type="text"
+              value={newClientName}
+              onChange={(e) => setNewClientName(e.target.value)}
+              placeholder="New client name"
+              className="bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-fg placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors"
+            />
+            <button
+              type="button"
+              onClick={handleCreateClient}
+              disabled={creatingClient || !newClientName.trim()}
+              className="px-4 py-2.5 rounded-lg text-sm font-medium border border-border text-fg hover:bg-surface-hover disabled:opacity-40 transition-colors"
+            >
+              {creatingClient ? "Creating…" : "Create client"}
+            </button>
             <button
               type="button"
               onClick={handleStart}
-              disabled={starting || !clientId || !!running}
-              className="ml-auto px-5 py-2.5 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-              style={{ background: "#C60D60" }}
+              disabled={starting || !clientId || selectionCount === 0 || !!running}
+              className="ml-auto px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:hover:bg-accent transition-colors"
             >
               {starting ? "Starting…" : "Import selected"}
             </button>
           </div>
-          {startError && <p className="text-sm text-red-400 mb-4">{startError}</p>}
+          {startError && <p className="text-sm text-red-500 mb-6 -mt-3">{startError}</p>}
         </>
       )}
 
+      {/* Progress */}
       {importStatus && (
-        <div className="bg-surface border border-border rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-white">
-              {running
-                ? "Importing…"
-                : importStatus.status === "completed"
-                  ? "Import complete"
-                  : importStatus.status === "completed_with_errors"
-                    ? "Import finished with errors"
-                    : "Import failed"}
-            </p>
-            <p className="text-xs text-neutral-400">
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2.5">
+              <span
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  running
+                    ? "bg-accent animate-pulse"
+                    : importStatus.status === "completed"
+                      ? "bg-emerald-500"
+                      : importStatus.status === "completed_with_errors"
+                        ? "bg-amber-500"
+                        : "bg-red-500"
+                }`}
+              />
+              <p className="text-sm font-medium text-fg">
+                {running
+                  ? "Copying into Drive…"
+                  : importStatus.status === "completed"
+                    ? "Import complete"
+                    : importStatus.status === "completed_with_errors"
+                      ? "Import finished — some files couldn't be copied"
+                      : "Import failed"}
+              </p>
+            </div>
+            <p className="text-xs text-muted tabular-nums flex-shrink-0" style={mono}>
               {importStatus.copiedFiles} copied
-              {importStatus.skippedFiles > 0 && ` · ${importStatus.skippedFiles} skipped (already present)`}
+              {importStatus.skippedFiles > 0 && ` · ${importStatus.skippedFiles} already there`}
               {importStatus.totalFiles > 0 && ` · ${importStatus.totalFiles} total`}
             </p>
           </div>
           {importStatus.totalFiles > 0 && (
-            <div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: "#2A2A2A" }}>
+            <div className="h-1.5 rounded-full bg-border overflow-hidden mb-3">
               <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  background: "#C60D60",
-                  width: `${Math.min(
-                    100,
-                    ((importStatus.copiedFiles +
-                      importStatus.skippedFiles +
-                      (importStatus.errors?.length || 0)) /
-                      importStatus.totalFiles) *
-                      100
-                  )}%`,
-                }}
+                className="h-full rounded-full bg-accent transition-all duration-500"
+                style={{ width: `${Math.min(100, (progressDone / importStatus.totalFiles) * 100)}%` }}
               />
             </div>
           )}
           {importStatus.errors && importStatus.errors.length > 0 && (
-            <div className="space-y-1 max-h-48 overflow-y-auto">
+            <div className="space-y-1 max-h-48 overflow-y-auto mb-1">
               {importStatus.errors.map((e, i) => (
-                <p key={i} className="text-xs text-red-400">
+                <p key={i} className="text-xs text-red-500" style={mono}>
                   {e.path ? `${e.path}/` : ""}
-                  {e.fileName || "Import"}: {e.message}
+                  {e.fileName || "Import"} — {e.message}
                 </p>
               ))}
             </div>
           )}
           {!running && importStatus.status !== "error" && (
-            <p className="text-xs text-neutral-500 mt-2">
-              Copied footage is being ingested — clips will appear under the client shortly.
+            <p className="text-xs text-muted">
+              The copied footage is being processed — clips appear under the client as they&apos;re ready.
             </p>
           )}
         </div>
