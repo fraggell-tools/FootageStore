@@ -307,3 +307,128 @@ export async function listFilesInFolder(folderId: string): Promise<DriveFile[]> 
 
   return files;
 }
+
+export interface DriveFolderChildren {
+  folders: { id: string; name: string }[];
+  files: { id: string; name: string; mimeType: string; size: number }[];
+}
+
+/**
+ * Get the name of an arbitrary Drive folder (e.g. an externally shared one).
+ * Throws the googleapis error (404/403) if the app's account can't see it.
+ */
+export async function getDriveFolderMeta(
+  folderId: string
+): Promise<{ id: string; name: string }> {
+  const drive = getDrive();
+  const res = await drive.files.get({
+    fileId: folderId,
+    supportsAllDrives: true,
+    fields: "id, name, mimeType",
+  });
+  if (res.data.mimeType !== "application/vnd.google-apps.folder") {
+    throw new Error("Not a folder");
+  }
+  return { id: res.data.id!, name: res.data.name! };
+}
+
+/**
+ * List the direct children of a folder (one level — no recursion).
+ * Works on folders outside our parent, e.g. externally shared ones.
+ */
+export async function listFolderChildren(
+  folderId: string
+): Promise<DriveFolderChildren> {
+  const drive = getDrive();
+  const folders: DriveFolderChildren["folders"] = [];
+  const files: DriveFolderChildren["files"] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const res = await drive.files.list({
+      q: `'${folderId}' in parents and trashed = false`,
+      fields: "nextPageToken, files(id, name, mimeType, size)",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      pageSize: 100,
+      pageToken,
+    });
+
+    for (const f of res.data.files || []) {
+      if (f.mimeType === "application/vnd.google-apps.folder") {
+        folders.push({ id: f.id!, name: f.name! });
+      } else {
+        files.push({
+          id: f.id!,
+          name: f.name!,
+          mimeType: f.mimeType || "application/octet-stream",
+          size: parseInt(f.size || "0", 10),
+        });
+      }
+    }
+
+    pageToken = res.data.nextPageToken || undefined;
+  } while (pageToken);
+
+  folders.sort((a, b) => a.name.localeCompare(b.name));
+  files.sort((a, b) => a.name.localeCompare(b.name));
+  return { folders, files };
+}
+
+/**
+ * Server-side copy of a Drive file into one of our folders.
+ * Fails with reason "cannotCopyFile" when the source owner disabled
+ * download/copy for viewers.
+ */
+export async function copyDriveFile(
+  fileId: string,
+  destFolderId: string
+): Promise<string> {
+  const drive = getDrive();
+  const res = await drive.files.copy({
+    fileId,
+    supportsAllDrives: true,
+    requestBody: { parents: [destFolderId] },
+    fields: "id",
+  });
+  return res.data.id!;
+}
+
+/**
+ * Find a direct child folder by exact name. Returns its ID or null.
+ */
+export async function findChildFolderByName(
+  parentId: string,
+  name: string
+): Promise<string | null> {
+  const drive = getDrive();
+  const escaped = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const res = await drive.files.list({
+    q: `'${parentId}' in parents and name = '${escaped}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: "files(id)",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    pageSize: 1,
+  });
+  return res.data.files?.[0]?.id || null;
+}
+
+/**
+ * Create a folder under an arbitrary parent folder.
+ */
+export async function createFolder(
+  parentId: string,
+  name: string
+): Promise<string> {
+  const drive = getDrive();
+  const res = await drive.files.create({
+    supportsAllDrives: true,
+    requestBody: {
+      name,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [parentId],
+    },
+    fields: "id",
+  });
+  return res.data.id!;
+}

@@ -118,6 +118,7 @@ Lives at `/mnt/user/appdata/footagestore/app/.env` (or passed via compose enviro
 - `worker/processors/` — individual BullMQ job handlers
 - `worker/syncDrive.ts` — Google Drive sync logic
 - `worker/reanalyze.ts` — re-run AI analysis on existing media
+- `src/app/(app)/admin/import/` + `worker/processors/importDrive.ts` — Drive import tool (copy footage from external shared folders into a client folder)
 - `Dockerfile` / `Dockerfile.worker` — build configs
 - `docker-compose.yml` — service topology (app + worker + db + redis)
 - `deploy-webhook/` — subsystem that receives GH webhooks to trigger deploys (separate service)

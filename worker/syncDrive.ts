@@ -24,7 +24,7 @@ const healthRedis = createRedisConnection();
 
 const SYNC_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
 
-async function sync() {
+export async function runDriveSync() {
   console.log(`[Sync] Starting Drive sync...`);
 
   try {
@@ -193,7 +193,7 @@ async function sync() {
 }
 
 // Run immediately on start, then every 3 minutes
-sync();
-setInterval(sync, SYNC_INTERVAL_MS);
+runDriveSync();
+setInterval(runDriveSync, SYNC_INTERVAL_MS);
 
 console.log(`[Sync] Drive sync running every ${SYNC_INTERVAL_MS / 1000}s`);
