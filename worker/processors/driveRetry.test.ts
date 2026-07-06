@@ -29,7 +29,9 @@ describe("withDriveRetry", () => {
         if (calls < 3) throw tooMany429;
         return "ok";
       },
-      { baseDelayMs: 100, sleep }
+      // Base delay must dwarf the ±1s jitter, or the two delay ranges overlap
+      // and the growth assertion below flakes.
+      { baseDelayMs: 2000, sleep }
     );
     expect(result).toBe("ok");
     expect(sleep).toHaveBeenCalledTimes(2);
