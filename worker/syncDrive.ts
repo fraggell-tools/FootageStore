@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import { clients, clips } from "../src/lib/db/schema";
 import { generateUniqueClipCode } from "../src/lib/clipCode";
 import { listClientFolders, listFilesInFolder, type DriveFile } from "../src/lib/gdrive";
+import { isVideoFile } from "../src/lib/isVideoFile";
 import { Queue } from "bullmq";
 import { createRedisConnection } from "../src/lib/redis";
 import { HEALTH_KEYS } from "../src/lib/health";
@@ -129,6 +130,10 @@ export async function runDriveSync() {
       if (!client.driveFolderId) continue;
       const driveFiles = await listFilesInFolder(client.driveFolderId);
       for (const file of driveFiles) {
+        // Only video counts as a clip — images, audio, docs etc. stay in Drive
+        // but never enter the library. Clips whose file no longer passes this
+        // filter fall out of this map and get removed below, by design.
+        if (!isVideoFile(file.name, file.mimeType)) continue;
         driveFileToClient.set(file.id, { clientId: client.id, file });
       }
     }
