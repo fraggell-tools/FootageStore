@@ -39,6 +39,17 @@ export async function runDriveSync() {
         .map((c) => [c.driveFolderId!, c])
     );
 
+    // SAFETY: an empty folder list alongside a non-empty DB almost always means
+    // the app account lost access to the parent folder (drive move, permission
+    // change) — not that every client was really deleted. Deleting here would
+    // cascade-drop every clip with its code, AI analysis and tags. Skip instead.
+    if (driveFolders.length === 0 && existingClients.length > 0) {
+      console.error(
+        "[Sync] Drive returned 0 client folders but the DB has clients — skipping cycle (possible access loss)"
+      );
+      return;
+    }
+
     let clientsCreated = 0;
     let clientsRemoved = 0;
     let clipsCreated = 0;
@@ -167,10 +178,18 @@ export async function runDriveSync() {
     }
 
     // Remove clips whose Drive file is gone from every client folder (truly deleted).
-    for (const clip of existingClips) {
-      if (clip.driveFileId && !driveFileToClient.has(clip.driveFileId)) {
-        await db.delete(clips).where(eq(clips.id, clip.id));
-        clipsRemoved++;
+    // SAFETY: if Drive suddenly reports zero files anywhere while the DB has clips,
+    // treat it as access loss rather than mass deletion and skip removals.
+    if (driveFileToClient.size === 0 && existingClips.length > 0) {
+      console.error(
+        `[Sync] Drive listed 0 files across all client folders but the DB has ${existingClips.length} clips — skipped clip removal (possible access loss)`
+      );
+    } else {
+      for (const clip of existingClips) {
+        if (clip.driveFileId && !driveFileToClient.has(clip.driveFileId)) {
+          await db.delete(clips).where(eq(clips.id, clip.id));
+          clipsRemoved++;
+        }
       }
     }
 
