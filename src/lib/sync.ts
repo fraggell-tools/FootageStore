@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { clients, clips } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { listClientFolders, listFilesInFolder } from "@/lib/gdrive";
+import { isVideoFile } from "@/lib/isVideoFile";
 import { getClipQueue } from "@/lib/queue";
 import { generateUniqueClipCode } from "@/lib/clipCode";
 
@@ -114,7 +115,12 @@ export async function syncFromDrive(): Promise<SyncResult> {
       if (!client.driveFolderId) continue;
 
       try {
-        const driveFiles = await listFilesInFolder(client.driveFolderId);
+        // Only video counts as a clip — images, audio, docs etc. stay in Drive
+        // but never enter the library. Clips whose file no longer passes this
+        // filter fall out of the id set and get removed below, by design.
+        const driveFiles = (await listFilesInFolder(client.driveFolderId)).filter((f) =>
+          isVideoFile(f.name, f.mimeType)
+        );
         const driveFileIds = new Set(driveFiles.map((f) => f.id));
 
         // Get existing clips for this client
