@@ -33,12 +33,14 @@ const normName = (n: string) => n.toLowerCase().replace(/^copy of /, "").trim();
 const normClient = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, "");
 const slice = (s: string | null, n: number) => (s == null ? null : s.slice(0, n));
 
-// Parse "…_M1_A3_…" (or "M1 A3") out of a filename as a fallback.
+// Parse "…_M1_A3_…" out of a filename as a fallback. Split on separators rather
+// than using \b, because \b doesn't fire around underscores (_M1_ is all \w).
 function fromFilename(name: string): { month: string; angle: string } | null {
-  const m = name.match(/\bM(\d{1,2})\b/i);
-  const a = name.match(/\bA(\d{1,2})\b/i);
-  if (!m) return null;
-  return { month: "M" + m[1], angle: a ? "Angle " + a[1] : "" };
+  const tokens = name.split(/[_\s.\-]+/);
+  const mTok = tokens.find((t) => /^m\d{1,2}$/i.test(t));
+  const aTok = tokens.find((t) => /^a\d{1,2}$/i.test(t));
+  if (!mTok) return null;
+  return { month: "M" + mTok.slice(1), angle: aTok ? "Angle " + aTok.slice(1) : "" };
 }
 
 async function main() {
