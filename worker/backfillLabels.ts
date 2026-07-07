@@ -97,25 +97,38 @@ async function main() {
     );
     if (!clips.length) { console.log(`- ${client.name}: already fully labelled, skipping`); continue; }
 
-    // Walk the Editors client folder; build filename -> {month, angle}.
+    // Walk the Editors client folder concurrently (the walk is bound by Drive API
+    // latency, so process many folders in parallel — ~10x faster than sequential).
     const map = new Map<string, { month: string; angle: string | null }>();
-    const stack: { id: string; segs: string[] }[] = [{ id: folderId, segs: [] }];
-    let files = 0;
-    while (stack.length) {
-      const { id, segs } = stack.pop()!;
-      for (const e of await kids(id)) {
-        if (e.mimeType.includes("folder")) {
-          if (SKIP_FOLDER.test(e.name.trim())) continue; // prune editing-artifact subtrees
-          stack.push({ id: e.id, segs: [...segs, e.name] });
+    const queue: { id: string; segs: string[] }[] = [{ id: folderId, segs: [] }];
+    let files = 0, active = 0;
+    const WALK_CONC = 10;
+    await new Promise<void>((resolve, reject) => {
+      const pump = () => {
+        if (!queue.length && active === 0) return resolve();
+        while (active < WALK_CONC && queue.length) {
+          const { id, segs } = queue.shift()!;
+          active++;
+          kids(id)
+            .then((entries) => {
+              for (const e of entries) {
+                if (e.mimeType.includes("folder")) {
+                  if (SKIP_FOLDER.test(e.name.trim())) continue; // prune editing-artifact subtrees
+                  queue.push({ id: e.id, segs: [...segs, e.name] });
+                } else if (isVideo(e.name)) {
+                  files++;
+                  const idx = segs.findIndex(looksLikeMonth);
+                  if (idx === -1) continue;
+                  map.set(normName(e.name), { month: segs[idx], angle: segs[idx + 1] || null });
+                }
+              }
+            })
+            .catch(reject)
+            .finally(() => { active--; pump(); });
         }
-        else if (isVideo(e.name)) {
-          files++;
-          const idx = segs.findIndex(looksLikeMonth);
-          if (idx === -1) continue;
-          map.set(normName(e.name), { month: segs[idx], angle: segs[idx + 1] || null });
-        }
-      }
-    }
+      };
+      pump();
+    });
 
     // Fill blank month/angle on this client's clips.
     let matched = 0, viaName = 0;
