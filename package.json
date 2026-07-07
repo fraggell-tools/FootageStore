@@ -13,7 +13,8 @@
     "db:seed": "npx tsx src/lib/db/seed.ts",
     "worker": "npx tsx worker/index.ts",
     "transcribe:backfill": "npx tsx worker/transcribeBackfill.ts",
-    "proxy:backfill": "npx tsx worker/backfillProxies.ts"
+    "proxy:backfill": "npx tsx worker/backfillProxies.ts",
+    "labels:backfill": "npx tsx worker/backfillLabels.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
