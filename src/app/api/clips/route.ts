@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clips } from "@/lib/db/schema";
-import { eq, ilike, sql, desc, count, and } from "drizzle-orm";
+import { eq, ilike, sql, desc, count, and, or } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -22,7 +22,16 @@ export async function GET(request: NextRequest) {
 
   const conditions = [eq(clips.clientId, clientId)];
   if (search) {
-    conditions.push(ilike(clips.name, `%${search}%`));
+    // Search name, filename, month and angle so panel free-text finds all of them.
+    const term = `%${search}%`;
+    conditions.push(
+      or(
+        ilike(clips.name, term),
+        ilike(clips.originalFilename, term),
+        ilike(clips.month, term),
+        ilike(clips.angle, term)
+      )!
+    );
   }
   if (shotType) {
     conditions.push(eq(clips.shotType, shotType));
