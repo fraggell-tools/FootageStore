@@ -13,6 +13,8 @@ import {
 import { extractMetadata } from "./extractMetadata";
 import { generateThumbnail } from "./generateThumbnail";
 import { generateSpriteSheet } from "./generateSpriteSheet";
+import { generateProxy } from "./generateProxy";
+import { uploadToR2, r2Enabled } from "../../src/lib/r2";
 import { generateClipName } from "./generateClipName";
 import { transcribeAudio } from "./transcribeAudio";
 import { uploadFileToDrive } from "../../src/lib/gdrive";
@@ -96,6 +98,9 @@ export async function processClip(data: JobData): Promise<void> {
     let thumbnailPath: string;
     let spritePath: string;
     let vttPath: string;
+    let proxyStatus = "none";
+    let proxyR2Key: string | null = null;
+    let proxyError: string | null = null;
 
     if (isImage) {
       // For images: use the image itself as the thumbnail, skip video processing
@@ -169,6 +174,28 @@ export async function processClip(data: JobData): Promise<void> {
       spritePath = getSpriteSheetPath(clipId);
       vttPath = getWebVTTPath(clipId);
       await generateSpriteSheet(inputPath, spritePath, vttPath, metadata.duration, metadata.width, metadata.height);
+
+      // 4b. Generate a 480p preview proxy and upload it to R2. Non-fatal: if R2
+      // isn't configured or the encode fails, the clip still finishes (preview
+      // falls back to the original) and we record proxyStatus='failed'.
+      if (r2Enabled) {
+        console.log(`[processClip] Generating 480p proxy for ${clipId}`);
+        const proxyTmpPath = `${processedDir}/proxy_480.mp4`;
+        try {
+          const size = await generateProxy(inputPath, proxyTmpPath);
+          const key = `proxy/${clipId}.mp4`;
+          await uploadToR2(key, await fsPromises.readFile(proxyTmpPath), "video/mp4");
+          proxyR2Key = key;
+          proxyStatus = "done";
+          console.log(`[processClip] Proxy uploaded for ${clipId} (${size} bytes) → ${key}`);
+        } catch (err) {
+          proxyStatus = "failed";
+          proxyError = (err as Error).message.slice(0, 500);
+          console.warn(`[processClip] Proxy generation failed for ${clipId}:`, proxyError);
+        } finally {
+          await fsPromises.unlink(proxyTmpPath).catch(() => {});
+        }
+      }
 
       // 5. Transcribe audio (if OPENAI_API_KEY set)
       // audioTalkingCandidate = audio side of the talking-to-camera gate
@@ -267,6 +294,9 @@ export async function processClip(data: JobData): Promise<void> {
         thumbnailPath,
         spriteSheetPath: spritePath,
         webvttPath: vttPath,
+        proxyStatus,
+        proxyR2Key,
+        proxyError,
         driveFileId,
         status: "ready",
         updatedAt: new Date(),

@@ -21,6 +21,10 @@ services:
       - GOOGLE_DRIVE_PARENT_FOLDER_ID=${GOOGLE_DRIVE_PARENT_FOLDER_ID}
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
       - SLACK_NICK_USER_ID=${SLACK_NICK_USER_ID}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
     volumes:
       - /mnt/user/appdata/footagestore/data:/data
     depends_on:
@@ -51,6 +55,12 @@ services:
       - GOOGLE_DRIVE_PARENT_FOLDER_ID=${GOOGLE_DRIVE_PARENT_FOLDER_ID}
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
       - SLACK_USER_IDS=${SLACK_USER_IDS}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - ENCODE_THREADS=${ENCODE_THREADS:-8}
+      - ENCODE_NICE=${ENCODE_NICE:-10}
     volumes:
       - /mnt/user/appdata/footagestore/data:/data
     depends_on:

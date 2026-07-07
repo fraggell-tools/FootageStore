@@ -58,6 +58,12 @@ export async function PATCH(
   if (body.shotType !== undefined) {
     updates.shotType = body.shotType || null;
   }
+  if (body.month !== undefined) {
+    updates.month = body.month ? String(body.month).slice(0, 50) : null;
+  }
+  if (body.angle !== undefined) {
+    updates.angle = body.angle ? String(body.angle).slice(0, 100) : null;
+  }
   if (body.tags !== undefined) {
     updates.tags = Array.isArray(body.tags) ? body.tags : null;
   }

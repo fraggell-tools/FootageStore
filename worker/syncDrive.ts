@@ -123,16 +123,33 @@ async function sync() {
     }
 
     const existingClips = await db
-      .select({ id: clips.id, clientId: clips.clientId, driveFileId: clips.driveFileId })
+      .select({
+        id: clips.id,
+        clientId: clips.clientId,
+        driveFileId: clips.driveFileId,
+        month: clips.month,
+        angle: clips.angle,
+      })
       .from(clips);
     const clipByDriveFileId = new Map(
       existingClips.filter((c) => c.driveFileId).map((c) => [c.driveFileId!, c])
     );
 
+    // Derive month + angle labels from the Drive folder path. The layout is
+    // Client > Month > Angle > …, so the first two path segments below the
+    // client root are the month and angle. Sliced to the column widths so an
+    // unusually long folder name can never fail the insert (cf. the file_size
+    // int4 overflow incident).
+    const deriveMonthAngle = (relativePath?: string[]) => ({
+      month: relativePath?.[0]?.slice(0, 50) ?? null,
+      angle: relativePath?.[1]?.slice(0, 100) ?? null,
+    });
+
     // Create clips for new files; reassign clips whose file now lives under a
-    // different client's folder.
+    // different client's folder, and keep month/angle in sync with the Drive path.
     for (const [fileId, { clientId, file }] of driveFileToClient) {
       const existing = clipByDriveFileId.get(fileId);
+      const { month, angle } = deriveMonthAngle(file.relativePath);
       if (!existing) {
         const clipId = randomUUID();
         try {
@@ -147,6 +164,8 @@ async function sync() {
             status: "processing",
             originalPath: `gdrive://${file.id}`,
             driveFileId: file.id,
+            month,
+            angle,
           });
           await queue.add("process-clip", { clipId }, { jobId: clipId });
           clipsCreated++;
@@ -156,13 +175,23 @@ async function sync() {
           lastInsertError = (err as Error).message;
           console.error(`[Sync] Failed to create clip "${file.name}":`, (err as Error).message);
         }
-      } else if (existing.clientId !== clientId) {
-        await db
-          .update(clips)
-          .set({ clientId, updatedAt: new Date() })
-          .where(eq(clips.id, existing.id));
-        clipsMoved++;
-        console.log(`[Sync] Reassigned clip ${existing.id} to its new client folder`);
+      } else {
+        // Update only what changed: client on reassignment, plus month/angle
+        // ONLY when currently blank. This backfills existing clips without
+        // clobbering a manual edit on every 3-minute sync (auto fills the gap,
+        // manual override then sticks).
+        const changes: Partial<typeof clips.$inferInsert> = {};
+        if (existing.clientId !== clientId) changes.clientId = clientId;
+        if (month !== null && !existing.month) changes.month = month;
+        if (angle !== null && !existing.angle) changes.angle = angle;
+        if (Object.keys(changes).length > 0) {
+          changes.updatedAt = new Date();
+          await db.update(clips).set(changes).where(eq(clips.id, existing.id));
+          if (changes.clientId) {
+            clipsMoved++;
+            console.log(`[Sync] Reassigned clip ${existing.id} to its new client folder`);
+          }
+        }
       }
     }
 

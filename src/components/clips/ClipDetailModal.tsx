@@ -22,6 +22,8 @@ export interface Clip {
   hasThumbnail: boolean;
   hasSpriteSheet: boolean;
   shotType?: string | null;
+  month?: string | null;
+  angle?: string | null;
   tags?: string[] | null;
   description?: string | null;
   productSkus?: string[] | null;
@@ -86,6 +88,8 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
   const [newCollectionName, setNewCollectionName] = useState("");
   const [localTags, setLocalTags] = useState<string[]>(clip.tags || []);
   const [localShotType, setLocalShotType] = useState<string>(clip.shotType || "");
+  const [localMonth, setLocalMonth] = useState<string>(clip.month || "");
+  const [localAngle, setLocalAngle] = useState<string>(clip.angle || "");
   const [localSkus, setLocalSkus] = useState<string[]>(clip.productSkus || []);
   const [localHasSpeech, setLocalHasSpeech] = useState<boolean | null>(
     clip.hasSpeech ?? null
@@ -120,6 +124,34 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
       if (res.ok && onUpdate) {
         onUpdate(clip.id, { shotType });
       }
+    } catch {}
+  }, [clip.id, onUpdate]);
+
+  // Month + angle are auto-derived from the Drive folder path but manually
+  // editable here; the edit sticks (sync only fills blanks, never overwrites).
+  const saveMonth = useCallback(async (month: string) => {
+    const value = month.trim() || null;
+    setLocalMonth(value ?? "");
+    try {
+      const res = await fetch(`/api/clips/${clip.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: value }),
+      });
+      if (res.ok && onUpdate) onUpdate(clip.id, { month: value });
+    } catch {}
+  }, [clip.id, onUpdate]);
+
+  const saveAngle = useCallback(async (angle: string) => {
+    const value = angle.trim() || null;
+    setLocalAngle(value ?? "");
+    try {
+      const res = await fetch(`/api/clips/${clip.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ angle: value }),
+      });
+      if (res.ok && onUpdate) onUpdate(clip.id, { angle: value });
     } catch {}
   }, [clip.id, onUpdate]);
 
@@ -494,6 +526,34 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
                     className="bg-white/5 border border-white/10 rounded-full px-2.5 py-0.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 focus:bg-white/10 focus:ring-1 focus:ring-emerald-500/40 w-24 uppercase transition-colors"
                   />
                 </form>
+              </div>
+            </div>
+
+            {/* Month + Angle (auto-derived from Drive Client>Month>Angle, editable) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[11px] text-muted uppercase tracking-wider mb-1.5">Month</p>
+                <input
+                  type="text"
+                  defaultValue={localMonth}
+                  key={`month-${clip.id}-${localMonth}`}
+                  onBlur={(e) => { if (e.target.value.trim() !== (localMonth || "")) saveMonth(e.target.value); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                  placeholder="e.g. June"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-sky-500 focus:bg-white/10 focus:ring-1 focus:ring-sky-500/40 transition-colors"
+                />
+              </div>
+              <div>
+                <p className="text-[11px] text-muted uppercase tracking-wider mb-1.5">Angle</p>
+                <input
+                  type="text"
+                  defaultValue={localAngle}
+                  key={`angle-${clip.id}-${localAngle}`}
+                  onBlur={(e) => { if (e.target.value.trim() !== (localAngle || "")) saveAngle(e.target.value); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                  placeholder="e.g. Angle 1"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 focus:bg-white/10 focus:ring-1 focus:ring-amber-500/40 transition-colors"
+                />
               </div>
             </div>
 

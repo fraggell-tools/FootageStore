@@ -63,6 +63,11 @@ export const clips = pgTable("clips", {
   webvttPath: text("webvtt_path"),
   originalPath: text("original_path").notNull(),
   shotType: varchar("shot_type", { length: 50 }), // AI-classified camera framing
+  month: varchar("month", { length: 50 }), // Drive Client>Month>Angle: month folder (auto-derived at sync, editable)
+  angle: varchar("angle", { length: 100 }), // Drive Client>Month>Angle: angle folder (auto-derived at sync, editable)
+  proxyStatus: varchar("proxy_status", { length: 20 }).default("none"), // none|processing|done|failed — 480p preview proxy
+  proxyR2Key: text("proxy_r2_key"), // R2 object key for the 480p proxy (proxy/<clipId>.mp4)
+  proxyError: text("proxy_error"), // last proxy-generation error message, if any
   tags: jsonb("tags").$type<string[]>(), // AI-generated tags for filtering (JSON array)
   productSkus: jsonb("product_skus").$type<string[]>(), // Manually assigned product SKUs
   transcript: text("transcript"), // Whisper-generated speech transcript
