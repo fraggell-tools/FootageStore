@@ -76,33 +76,30 @@ function FilterDropdown({
   }, [open]);
 
   const activeCount = selected.size;
-  // Colours must match the pill colours used on each clip card:
-  //   neutral → shot type (grey)
-  //   emerald → SKUs
-  //   default (accent) → tags
   // Full literal class strings per accent so Tailwind's JIT can see them.
   //   neutral → shot type (grey), emerald → SKUs, sky → month, amber → angle,
-  //   default (accent) → tags
-  const activeBg = {
+  //   default (accent) → tags. Typed Record so an absent accent falls through.
+  const key = accentColor ?? "";
+  const activeBg = ({
     emerald: "bg-emerald-500",
     neutral: "bg-neutral-600",
     sky: "bg-sky-500",
     amber: "bg-amber-500",
-  }[accentColor ?? ""] ?? "bg-accent";
-  const checkColor = {
+  } as Record<string, string>)[key] ?? "bg-accent";
+  const checkColor = ({
     emerald: "text-emerald-400",
     neutral: "text-neutral-300",
     sky: "text-sky-400",
     amber: "text-amber-400",
-  }[accentColor ?? ""] ?? "text-accent";
+  } as Record<string, string>)[key] ?? "text-accent";
   // Inactive-state colours — a subtle tinted background + coloured text
   // so each filter's identity is visible even before you select anything.
-  const inactiveClasses = {
+  const inactiveClasses = ({
     emerald: "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15 hover:border-emerald-500/50",
     neutral: "bg-neutral-500/10 border-neutral-500/30 text-neutral-300 hover:bg-neutral-500/15 hover:border-neutral-500/50",
     sky: "bg-sky-500/10 border-sky-500/30 text-sky-300 hover:bg-sky-500/15 hover:border-sky-500/50",
     amber: "bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/15 hover:border-amber-500/50",
-  }[accentColor ?? ""] ?? "bg-accent/10 border-accent/30 text-accent hover:bg-accent/15 hover:border-accent/50";
+  } as Record<string, string>)[key] ?? "bg-accent/10 border-accent/30 text-accent hover:bg-accent/15 hover:border-accent/50";
 
   return (
     <div className="relative" ref={ref}>
