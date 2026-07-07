@@ -25,6 +25,10 @@ function getDrive() {
 }
 
 const isVideo = (n: string) => /\.(mov|mp4|m4v|avi|mkv|mxf|mts|webm)$/i.test(n);
+// Folders that hold editing artifacts (thousands of files each) but never the
+// source camera footage — pruning them speeds the walk up several-fold. Kept:
+// Footage(s), B-Roll, Assets, angle/month/mashup folders, everything else.
+const SKIP_FOLDER = /^(_?proxies|project( files)?|projects|exports?|renders?|cache|for ae|auto[- ]?save|adobe.*|.*premiere.*|thumbnails?)$/i;
 const looksLikeMonth = (s: string) =>
   /^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t)?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/i.test(s) ||
   /^\d{4}[-_ /]\d{1,2}$/.test(s) ||
@@ -86,6 +90,13 @@ async function main() {
     const folderId = editorClients.get(normClient(client.name));
     if (!folderId) { console.log(`- ${client.name}: no match in Editors, skipping`); continue; }
 
+    // Skip clients that already have every clip labelled (fast re-runs).
+    const { rows: clips } = await pool.query<{ id: string; original_filename: string }>(
+      "SELECT id, original_filename FROM clips WHERE client_id = $1 AND (month IS NULL OR angle IS NULL)",
+      [client.id]
+    );
+    if (!clips.length) { console.log(`- ${client.name}: already fully labelled, skipping`); continue; }
+
     // Walk the Editors client folder; build filename -> {month, angle}.
     const map = new Map<string, { month: string; angle: string | null }>();
     const stack: { id: string; segs: string[] }[] = [{ id: folderId, segs: [] }];
@@ -93,7 +104,10 @@ async function main() {
     while (stack.length) {
       const { id, segs } = stack.pop()!;
       for (const e of await kids(id)) {
-        if (e.mimeType.includes("folder")) stack.push({ id: e.id, segs: [...segs, e.name] });
+        if (e.mimeType.includes("folder")) {
+          if (SKIP_FOLDER.test(e.name.trim())) continue; // prune editing-artifact subtrees
+          stack.push({ id: e.id, segs: [...segs, e.name] });
+        }
         else if (isVideo(e.name)) {
           files++;
           const idx = segs.findIndex(looksLikeMonth);
@@ -104,10 +118,6 @@ async function main() {
     }
 
     // Fill blank month/angle on this client's clips.
-    const { rows: clips } = await pool.query<{ id: string; original_filename: string }>(
-      "SELECT id, original_filename FROM clips WHERE client_id = $1 AND (month IS NULL OR angle IS NULL)",
-      [client.id]
-    );
     let matched = 0, viaName = 0;
     for (const clip of clips) {
       let hit = map.get(normName(clip.original_filename));
