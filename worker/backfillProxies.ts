@@ -22,8 +22,12 @@ import fsPromises from "fs/promises";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
 
-const CONCURRENCY = parseInt(process.env.BACKFILL_CONCURRENCY || "2", 10);
+const CONCURRENCY = parseInt(process.env.BACKFILL_CONCURRENCY || "4", 10);
 const LIMIT = process.env.BACKFILL_LIMIT ? parseInt(process.env.BACKFILL_LIMIT, 10) : undefined;
+
+// Guards against two backfill loops running in the same process (e.g. the
+// worker's startup auto-resume can't overlap itself across restarts-in-flight).
+let _running = false;
 
 const isImage = (name: string) => /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(name);
 
@@ -74,51 +78,79 @@ async function processOne(clip: {
   }
 }
 
+/**
+ * Backfill proxies for existing clips. Exported so the worker can auto-resume it
+ * on startup (self-healing). `onlyNone` targets never-attempted clips only (skips
+ * previously-failed ones so broken sources aren't retried on every restart); the
+ * CLI passes onlyNone=false to also retry failures. Guarded so it can't overlap
+ * itself in a single process.
+ */
+export async function runProxyBackfill(
+  opts: { concurrency?: number; limit?: number; onlyNone?: boolean } = {}
+): Promise<{ done: number; skipped: number; failed: number } | null> {
+  if (!r2Enabled) {
+    console.log("[proxy-backfill] R2 not configured — skipping");
+    return null;
+  }
+  if (_running) {
+    console.log("[proxy-backfill] already running — skipping");
+    return null;
+  }
+  _running = true;
+  const concurrency = opts.concurrency ?? CONCURRENCY;
+  try {
+    const proxyPending = opts.onlyNone
+      ? or(isNull(clips.proxyStatus), eq(clips.proxyStatus, "none"))
+      : or(isNull(clips.proxyStatus), eq(clips.proxyStatus, "none"), ne(clips.proxyStatus, "done"));
+    const rows = await db
+      .select({
+        id: clips.id,
+        driveFileId: clips.driveFileId,
+        originalFilename: clips.originalFilename,
+      })
+      .from(clips)
+      .where(and(eq(clips.status, "ready"), proxyPending))
+      .limit(opts.limit ?? LIMIT ?? 1_000_000);
+
+    console.log(`[proxy-backfill] ${rows.length} clips pending (concurrency ${concurrency})`);
+    if (!rows.length) return { done: 0, skipped: 0, failed: 0 };
+
+    let done = 0, skip = 0, fail = 0, i = 0;
+    async function runner() {
+      while (i < rows.length) {
+        const clip = rows[i++];
+        const r = await processOne(clip);
+        if (r === "done") done++;
+        else if (r === "skip") skip++;
+        else fail++;
+        if ((done + skip + fail) % 50 === 0) {
+          console.log(`[proxy-backfill] ${done + skip + fail}/${rows.length} (done ${done}, skip ${skip}, fail ${fail})`);
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: concurrency }, runner));
+    console.log(`[proxy-backfill] finished: done=${done}, skipped=${skip}, failed=${fail}`);
+    return { done, skipped: skip, failed: fail };
+  } finally {
+    _running = false;
+  }
+}
+
+// CLI entrypoint (npm run proxy:backfill) — retries failed too, then exits.
+// Guarded so importing this module from the worker does NOT trigger a run.
 async function main() {
   if (!r2Enabled) {
     console.error("R2 is not configured (R2_ACCOUNT_ID / keys). Aborting.");
     await pool.end();
     process.exit(1);
   }
-
-  // Ready clips whose proxy is missing or previously failed.
-  const rows = await db
-    .select({
-      id: clips.id,
-      driveFileId: clips.driveFileId,
-      originalFilename: clips.originalFilename,
-    })
-    .from(clips)
-    .where(
-      and(
-        eq(clips.status, "ready"),
-        or(isNull(clips.proxyStatus), eq(clips.proxyStatus, "none"), ne(clips.proxyStatus, "done"))
-      )
-    )
-    .limit(LIMIT ?? 1_000_000);
-
-  console.log(`Backfilling proxies for ${rows.length} clips (concurrency ${CONCURRENCY})`);
-
-  let done = 0, skip = 0, fail = 0, i = 0;
-  async function worker() {
-    while (i < rows.length) {
-      const clip = rows[i++];
-      const r = await processOne(clip);
-      if (r === "done") done++;
-      else if (r === "skip") skip++;
-      else fail++;
-      if ((done + skip + fail) % 50 === 0) {
-        console.log(`  … ${done + skip + fail}/${rows.length} (done ${done}, skip ${skip}, fail ${fail})`);
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-
-  console.log(`Done. done=${done}, skipped=${skip}, failed=${fail}`);
+  await runProxyBackfill({ onlyNone: false });
   await pool.end();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (process.argv[1] && process.argv[1].includes("backfillProxies")) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

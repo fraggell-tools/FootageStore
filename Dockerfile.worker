@@ -9,7 +9,7 @@ FROM node:20-bookworm-slim
 # If no GPU is present at runtime the worker auto-falls back to libx264 (see
 # generateProxy nvencAvailable()).
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl xz-utils ca-certificates \
+  && apt-get install -y --no-install-recommends curl xz-utils ca-certificates procps \
   && curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz -o /tmp/ffmpeg.tar.xz \
   && mkdir -p /tmp/ffmpeg && tar -xf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg --strip-components=1 \
   && cp /tmp/ffmpeg/bin/ffmpeg /tmp/ffmpeg/bin/ffprobe /usr/local/bin/ \

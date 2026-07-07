@@ -66,6 +66,8 @@ services:
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
       - ENCODE_THREADS=${ENCODE_THREADS:-8}
       - ENCODE_NICE=${ENCODE_NICE:-10}
+      - BACKFILL_CONCURRENCY=${BACKFILL_CONCURRENCY:-4}
+      - PROXY_BACKFILL_ON_STARTUP=${PROXY_BACKFILL_ON_STARTUP:-true}
     volumes:
       - /mnt/user/appdata/footagestore/data:/data
     depends_on:

@@ -59,3 +59,21 @@ console.log("[Worker] Listening for jobs on queue: clip-processing");
 import("./syncDrive").catch((err) => {
   console.error("[Worker] Failed to start Drive sync:", err.message);
 });
+
+// Self-healing proxy backfill: on every worker startup, resume generating 480p
+// proxies for any existing clips that don't have one yet. This makes the long
+// backfill survive worker restarts (it just picks up where it left off) instead
+// of dying silently. No-op once every ready clip has a proxy. `onlyNone` skips
+// previously-failed clips so broken sources aren't retried forever. Disable with
+// PROXY_BACKFILL_ON_STARTUP=false. Runs 30s after boot so the queue + sync settle.
+if (process.env.PROXY_BACKFILL_ON_STARTUP !== "false") {
+  setTimeout(() => {
+    import("./backfillProxies")
+      .then(({ runProxyBackfill }) =>
+        runProxyBackfill({ onlyNone: true }).catch((err) =>
+          console.error("[Worker] proxy backfill failed:", err.message)
+        )
+      )
+      .catch((err) => console.error("[Worker] failed to load proxy backfill:", err.message));
+  }, 30_000);
+}
