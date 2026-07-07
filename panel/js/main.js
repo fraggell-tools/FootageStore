@@ -1,7 +1,7 @@
 'use strict';
 
 const API_BASE      = 'https://footagestore.fraggell.com';
-const PANEL_VERSION = '1.6.0';
+const PANEL_VERSION = '1.8.0';
 const PLUGIN_AUTH   = API_BASE;   // auth goes through Cloudflare, works for all editors
 const PROXY_BASE    = API_BASE;   // proxies served via /api/assets/{id}/proxy.mp4
 const PAGE_LIMIT    = 24;
@@ -14,6 +14,16 @@ const SESSION_COOKIE= '__Secure-authjs.session-token';
 
 const PREF_EMAIL    = 'fraggell_saved_email';
 const PREF_PASS     = 'fraggell_saved_pass';
+
+// Escape untrusted values (clip names, filenames, tags, folder names from the
+// API/Drive) before putting them in innerHTML. In a CEP panel the page has Node
+// integration, so an unescaped "<img onerror=…>" in a filename is RCE, not just
+// XSS. Use this at every interpolation of API/Drive data into innerHTML.
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"'`]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c];
+  });
+}
 
 const fs       = window.cep_node ? window.cep_node.require('fs')    : null;
 const nodePath = window.cep_node ? window.cep_node.require('path')  : null;
@@ -335,6 +345,7 @@ var state = {
   clips:[], totalClips:0, currentPage:1, totalPages:1,
   selected:new Set(), modalClip:null,
   searchQuery:'', filterShotType:null, filterTags:new Set(), filterSkus:new Set(),
+  filterMonths:new Set(), filterAngles:new Set(),
   gridSize:'md', projectName:'No project open',
   vttCache:new Map(), spriteCache:new Map(),
   thumbCache:new Map(),
@@ -545,6 +556,8 @@ function getVisible(){
       var s=Array.isArray(c.productSkus)?c.productSkus:(typeof c.productSkus==='string'&&c.productSkus?JSON.parse(c.productSkus):[]);
       if(!Array.from(state.filterSkus).every(function(f){return s.includes(f);})) return false;
     }
+    if(state.filterMonths.size && !state.filterMonths.has(c.month)) return false;
+    if(state.filterAngles.size && !state.filterAngles.has(c.angle)) return false;
     return true;
   });
 }
@@ -603,7 +616,7 @@ function showDrivePicker(drives){
   var list=document.getElementById('drive-picker-list'); list.innerHTML='';
   drives.forEach(function(d){
     var b=document.createElement('button'); b.className='drive-pick-btn';
-    b.innerHTML='<span class="drive-pick-icon">&#9654;</span><div class="drive-pick-body"><span class="drive-pick-name">'+d.name+'</span><span class="drive-pick-path">'+d.fullPath+'</span></div>';
+    b.innerHTML='<span class="drive-pick-icon">&#9654;</span><div class="drive-pick-body"><span class="drive-pick-name">'+esc(d.name)+'</span><span class="drive-pick-path">'+esc(d.fullPath)+'</span></div>';
     b.addEventListener('click',function(){
       // Check for Footage Storage subfolder just like autoDetectDrive does
       var chosenRoot=d.fullPath;
@@ -631,7 +644,7 @@ function renderClientList(){
     var btn=document.createElement('button');
     btn.className='client-item'+(state.activeClient&&state.activeClient.id===c.id?' client-item--active':'');
     var col=avatarColor(c.name);
-    btn.innerHTML='<div class="client-avatar" style="background:'+col+'22;color:'+col+'">'+c.name[0].toUpperCase()+'</div><span class="client-name">'+c.name+'</span><span class="client-count">'+c.clipCount+'</span>';
+    btn.innerHTML='<div class="client-avatar" style="background:'+col+'22;color:'+col+'">'+esc(c.name[0].toUpperCase())+'</div><span class="client-name">'+esc(c.name)+'</span><span class="client-count">'+esc(c.clipCount)+'</span>';
     btn.addEventListener('click',function(){selectClient(c);});
     el.appendChild(btn);
   });
@@ -641,14 +654,19 @@ async function selectClient(client){
   if(state.activeClient&&state.activeClient.id===client.id) return;
   state.activeClient=client; state.clips=[]; state.selected.clear();
   state.searchQuery=''; state.currentPage=1; state.filterShotType=null; state.filterTags.clear(); state.filterSkus.clear();
+  state.filterMonths.clear(); state.filterAngles.clear();
   var inp=document.getElementById('search-input'); if(inp) inp.value='';
   document.getElementById('content-title').textContent=client.name;
   document.getElementById('fb-shottype-label').textContent='Shot Type';
   document.getElementById('fb-tags-label').textContent='Tags';
   document.getElementById('fb-skus-label').textContent='SKU';
+  document.getElementById('fb-month-label').textContent='Month';
+  document.getElementById('fb-angle-label').textContent='Angle';
   document.getElementById('fb-shottype').classList.remove('active');
   document.getElementById('fb-tags').classList.remove('active');
   document.getElementById('fb-skus').classList.remove('active');
+  document.getElementById('fb-month').classList.remove('active');
+  document.getElementById('fb-angle').classList.remove('active');
   document.getElementById('active-filters').innerHTML='';
   document.querySelectorAll('.client-item').forEach(function(el2){el2.classList.toggle('client-item--active',el2.querySelector('.client-name').textContent===client.name);});
   document.getElementById('clip-count-badge').textContent='Loading...';
@@ -682,14 +700,14 @@ function renderClipGrid(){
       '<div class="clip-thumb-wrap">'+
         (cached?'':'<div class="clip-thumb-skeleton"></div><div class="clip-thumb-loader"><div class="spinner"></div></div>')+
         '<div class="clip-scrub-layer" style="display:none"></div>'+
-        '<img class="clip-thumb-img'+(cached?' loaded':'')+'" data-id="'+clip.id+'" src="'+(cached||'')+'" draggable="false">'+
-        (dur?'<div class="clip-duration">'+dur+'</div>':'')+
+        '<img class="clip-thumb-img'+(cached?' loaded':'')+'" data-id="'+esc(clip.id)+'" src="'+esc(cached||'')+'" draggable="false">'+
+        (dur?'<div class="clip-duration">'+esc(dur)+'</div>':'')+
         '<div class="clip-sel-check">&#10003;</div>'+
       '</div>'+
       '<div class="clip-card-info">'+
-        (clip.code?'<div class="clip-code-badge">'+clip.code+'</div>':'')+
-        '<div class="clip-name" title="'+name+'">'+name+'</div>'+
-        '<div class="clip-sub"><span>'+(clip.shotType||'')+'</span><span>'+fmtSize(clip.fileSize||0)+'</span></div>'+
+        (clip.code?'<div class="clip-code-badge">'+esc(clip.code)+'</div>':'')+
+        '<div class="clip-name" title="'+esc(name)+'">'+esc(name)+'</div>'+
+        '<div class="clip-sub"><span>'+esc(clip.shotType||'')+'</span><span>'+esc(fmtSize(clip.fileSize||0))+'</span></div>'+
       '</div>';
     card.addEventListener('mousedown', function(e){ onCardMouseDown(card,clip,e); });
     card.addEventListener('mousemove', function(e){ onCardMouseMove(card,clip,e); updateScrub(card,clip,e); });
@@ -882,6 +900,7 @@ function updateBottomBar(){
   document.getElementById('bottom-label').textContent=n>0?n+' clip'+(n!==1?'s':'')+' selected':'No clips selected';
   document.getElementById('clear-btn').disabled=n===0;
   document.getElementById('import-btn').disabled=n===0;
+  var dl=document.getElementById('download-btn'); if(dl) dl.disabled=n===0;
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
@@ -914,7 +933,25 @@ function onSkuSelect(v){
   closeMenus();
 }
 
-/** Rebuild Shot Type, Tags and SKU filter menus from current state.clips data. */
+/** Toggle a month filter on/off (client-side) and refresh the visible clips. */
+function onMonthSelect(v){
+  state.filterMonths.has(v) ? state.filterMonths.delete(v) : state.filterMonths.add(v);
+  document.getElementById('fb-month-label').textContent = state.filterMonths.size ? state.filterMonths.size + ' months' : 'Month';
+  document.getElementById('fb-month').classList.toggle('active', state.filterMonths.size > 0);
+  renderClipGrid(); updateCountBadge(); updateLoadMore(); buildFilterMenus();
+  closeMenus();
+}
+
+/** Toggle an angle filter on/off (client-side) and refresh the visible clips. */
+function onAngleSelect(v){
+  state.filterAngles.has(v) ? state.filterAngles.delete(v) : state.filterAngles.add(v);
+  document.getElementById('fb-angle-label').textContent = state.filterAngles.size ? state.filterAngles.size + ' angles' : 'Angle';
+  document.getElementById('fb-angle').classList.toggle('active', state.filterAngles.size > 0);
+  renderClipGrid(); updateCountBadge(); updateLoadMore(); buildFilterMenus();
+  closeMenus();
+}
+
+/** Rebuild Shot Type, Tags, SKU, Month and Angle filter menus from state.clips. */
 function buildFilterMenus(){
   var shots = [...new Set(state.clips.map(function(c){ return c.shotType; }).filter(Boolean))].sort();
   var allTags = [...new Set(state.clips.flatMap(function(c){
@@ -925,15 +962,19 @@ function buildFilterMenus(){
     var s = c.productSkus;
     return Array.isArray(s) ? s : (typeof s === 'string' && s ? JSON.parse(s) : []);
   }))].sort();
+  var allMonths = [...new Set(state.clips.map(function(c){ return c.month; }).filter(Boolean))].sort();
+  var allAngles = [...new Set(state.clips.map(function(c){ return c.angle; }).filter(Boolean))].sort();
   buildMenu('fm-shottype', shots, onShotTypeSelect, function(v){ return v === state.filterShotType; });
   buildMenu('fm-tags', allTags, onTagSelect, function(v){ return state.filterTags.has(v); });
   buildMenu('fm-skus', allSkus, onSkuSelect, function(v){ return state.filterSkus.has(v); });
+  buildMenu('fm-month', allMonths, onMonthSelect, function(v){ return state.filterMonths.has(v); });
+  buildMenu('fm-angle', allAngles, onAngleSelect, function(v){ return state.filterAngles.has(v); });
 }
 /** Render a filter dropdown menu. Calls onClick(value) when an item is selected. */
 function buildMenu(menuId,items,onClick,isSel){
   var menu=document.getElementById(menuId);if(!menu)return;menu.innerHTML='';
   if(!items.length){menu.innerHTML='<div class="filter-menu-item" style="color:var(--text-dim)">No options yet</div>';return;}
-  items.forEach(function(item){var div=document.createElement('div');div.className='filter-menu-item'+(isSel(item)?' selected':'');div.innerHTML='<span class="filter-check">'+(isSel(item)?'&#10003;':'')+'</span><span>'+item+'</span>';div.addEventListener('click',function(){onClick(item);buildFilterMenus();});menu.appendChild(div);});
+  items.forEach(function(item){var div=document.createElement('div');div.className='filter-menu-item'+(isSel(item)?' selected':'');div.innerHTML='<span class="filter-check">'+(isSel(item)?'&#10003;':'')+'</span><span>'+esc(item)+'</span>';div.addEventListener('click',function(){onClick(item);buildFilterMenus();});menu.appendChild(div);});
 }
 /** Re-render the active filter pills row from current filter state. */
 function updateActiveTags(){
@@ -944,7 +985,7 @@ function updateActiveTags(){
   if(state.filterShotType){
     var pill = document.createElement('div');
     pill.className = 'active-tag';
-    pill.innerHTML = state.filterShotType + '<button>x</button>';
+    pill.innerHTML = esc(state.filterShotType) + '<button>x</button>';
     pill.querySelector('button').addEventListener('click', function(){
       state.filterShotType = null;
       document.getElementById('fb-shottype-label').textContent = 'Shot Type';
@@ -960,7 +1001,7 @@ function updateActiveTags(){
   state.filterTags.forEach(function(tag){
     var pill = document.createElement('div');
     pill.className = 'active-tag';
-    pill.innerHTML = tag + '<button>x</button>';
+    pill.innerHTML = esc(tag) + '<button>x</button>';
     pill.querySelector('button').addEventListener('click', function(){
       state.filterTags.delete(tag);
       if(!state.filterTags.size){
@@ -978,7 +1019,7 @@ function updateActiveTags(){
   state.filterSkus.forEach(function(sku){
     var pill = document.createElement('div');
     pill.className = 'active-tag active-tag--sku';
-    pill.innerHTML = sku + '<button>x</button>';
+    pill.innerHTML = esc(sku) + '<button>x</button>';
     pill.querySelector('button').addEventListener('click', function(){
       state.filterSkus.delete(sku);
       if(!state.filterSkus.size){
@@ -1007,13 +1048,18 @@ function populateModalMeta(clip){
   var codeEl=document.getElementById('modal-clip-code');if(codeEl)codeEl.textContent=clip.code||'';
   // Shot type
   var shot=clip.shotType||'';
-  document.getElementById('modal-shot-tags').innerHTML=shot?'<span class="modal-tag">'+shot+'</span>':'<span style="color:var(--text-dim);font-size:10px">None</span>';
+  document.getElementById('modal-shot-tags').innerHTML=shot?'<span class="modal-tag">'+esc(shot)+'</span>':'<span style="color:var(--text-dim);font-size:10px">None</span>';
   // Tags
   var tags=Array.isArray(clip.tags)?clip.tags:(typeof clip.tags==='string'&&clip.tags?JSON.parse(clip.tags):[]);
-  document.getElementById('modal-clip-tags').innerHTML=tags.length?tags.map(function(t){return'<span class="modal-tag">'+t+'</span>';}).join(''):'<span style="color:var(--text-dim);font-size:10px">None</span>';
+  document.getElementById('modal-clip-tags').innerHTML=tags.length?tags.map(function(t){return'<span class="modal-tag">'+esc(t)+'</span>';}).join(''):'<span style="color:var(--text-dim);font-size:10px">None</span>';
   // Product SKUs
   var skus=Array.isArray(clip.productSkus)?clip.productSkus:(typeof clip.productSkus==='string'&&clip.productSkus?JSON.parse(clip.productSkus):[]);
-  document.getElementById('modal-sku-tags').innerHTML=skus.length?skus.map(function(s){return'<span class="modal-tag modal-tag--sku">'+s+'</span>';}).join(''):'<span style="color:var(--text-dim);font-size:10px">None</span>';
+  document.getElementById('modal-sku-tags').innerHTML=skus.length?skus.map(function(s){return'<span class="modal-tag modal-tag--sku">'+esc(s)+'</span>';}).join(''):'<span style="color:var(--text-dim);font-size:10px">None</span>';
+  // Month + Angle (editable inputs)
+  var monthEl=document.getElementById('modal-month-input');
+  var angleEl=document.getElementById('modal-angle-input');
+  if(monthEl){ monthEl.value=clip.month||''; monthEl.dataset.clipId=clip.id; }
+  if(angleEl){ angleEl.value=clip.angle||''; angleEl.dataset.clipId=clip.id; }
   // Stats grid
   document.getElementById('stat-duration').textContent=clip.duration?fmtDur(clip.duration):'--';
   document.getElementById('stat-resolution').textContent=(clip.width&&clip.height)?clip.width+'x'+clip.height:'--';
@@ -1293,6 +1339,58 @@ async function importSelected(){
   });
 }
 
+// ── Month/Angle edit ───────────────────────────────────────────────────────────
+/** PATCH a clip's month or angle label. Updates local state so filters refresh. */
+async function saveClipLabel(clipId, field, value){
+  if(!clipId) return;
+  var v=(value||'').trim()||null;
+  var c=state.clips.find(function(x){return x.id===clipId;});
+  if(c && (c[field]||null)===v) return; // no change
+  var body={}; body[field]=v;
+  try{
+    await apiJSON('/api/clips/'+clipId,{method:'PATCH',body:JSON.stringify(body)});
+    if(c) c[field]=v;
+    if(state.modalClip&&state.modalClip.id===clipId) state.modalClip[field]=v;
+    buildFilterMenus();
+    showToast(field.charAt(0).toUpperCase()+field.slice(1)+' saved','success');
+  }catch(e){ log('warn','saveClipLabel failed',e); showToast('Failed to save '+field,'error'); }
+}
+
+// ── Bulk download ──────────────────────────────────────────────────────────────
+/**
+ * Copy the selected clips' ORIGINAL files from the mounted Shared Drive to a
+ * folder the editor picks. The originals are already local (Google Drive Desktop),
+ * so this is a plain file copy — no network download.
+ */
+async function downloadSelected(){
+  if(!state.selected.size) return;
+  if(!fs||!nodePath||!(window.cep&&window.cep.fs)){ showToast('File access unavailable in this environment','error'); return; }
+
+  var dlg=window.cep.fs.showOpenDialog(false,true,'Choose a download folder','');
+  if(!dlg||!dlg.data||!dlg.data.length) return; // cancelled
+  var destDir=dlg.data[0];
+
+  var selectedClips=state.clips.filter(function(c){return state.selected.has(c.id);});
+  showToast('Downloading '+selectedClips.length+' clip'+(selectedClips.length!==1?'s':'')+'…','info');
+  var copied=0, notFound=[], failed=[];
+  for(var i=0;i<selectedClips.length;i++){
+    var clip=selectedClips[i];
+    var fn=clip.originalFilename||'';
+    var p=state.pathCache.get(fn);
+    if(!p&&state.footageRoot&&fn){ p=resolveClipPath(state.footageRoot, state.activeClient.name, clip, fs, nodePath); if(p) state.pathCache.set(fn,p); }
+    if(!p){ notFound.push(fn); continue; }
+    try{
+      var dest=nodePath.join(destDir, nodePath.basename(p));
+      await new Promise(function(resolve,reject){ fs.copyFile(p, dest, function(err){ err?reject(err):resolve(); }); });
+      copied++;
+    }catch(e){ failed.push(fn); log('warn','download copy failed for '+fn,e); }
+  }
+  var msg='✓ '+copied+' downloaded to '+destDir;
+  if(notFound.length) msg+=' · '+notFound.length+' not found on Drive';
+  if(failed.length) msg+=' · '+failed.length+' failed';
+  showToast(msg, copied?'success':'error');
+}
+
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 // fmtSize, fmtDur, fmtTime — defined in js/utils.js
@@ -1439,6 +1537,23 @@ function setupPanelEvents(){
     document.getElementById('fm-shottype').classList.remove('open');
     document.getElementById('fm-tags').classList.remove('open');
   });
+  document.getElementById('fb-month').addEventListener('click',function(e){
+    e.stopPropagation();
+    var open=document.getElementById('fm-month').classList.contains('open');
+    closeMenus(); if(!open) document.getElementById('fm-month').classList.add('open');
+  });
+  document.getElementById('fb-angle').addEventListener('click',function(e){
+    e.stopPropagation();
+    var open=document.getElementById('fm-angle').classList.contains('open');
+    closeMenus(); if(!open) document.getElementById('fm-angle').classList.add('open');
+  });
+  // Save month/angle edits on blur (PATCH to the API; sync won't overwrite manual edits).
+  ['modal-month-input','modal-angle-input'].forEach(function(id){
+    var el=document.getElementById(id); if(!el) return;
+    el.addEventListener('blur',function(){ saveClipLabel(el.dataset.clipId, id==='modal-month-input'?'month':'angle', el.value); });
+    el.addEventListener('keydown',function(e){ if(e.key==='Enter') el.blur(); });
+  });
+  document.getElementById('download-btn').addEventListener('click',downloadSelected);
   document.addEventListener('click',closeMenus);
 }
 

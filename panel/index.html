@@ -147,6 +147,20 @@
                 </button>
                 <div class="filter-menu" id="fm-skus"></div>
               </div>
+              <div class="filter-dropdown" id="fd-month">
+                <button class="filter-btn" id="fb-month">
+                  <span id="fb-month-label">Month</span>
+                  <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <div class="filter-menu" id="fm-month"></div>
+              </div>
+              <div class="filter-dropdown" id="fd-angle">
+                <button class="filter-btn" id="fb-angle">
+                  <span id="fb-angle-label">Angle</span>
+                  <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <div class="filter-menu" id="fm-angle"></div>
+              </div>
               <div id="active-filters"></div>
             </div>
             <div id="topbar-right">
@@ -181,6 +195,7 @@
         <div id="bottom-actions">
           <button id="select-all-btn" class="bar-btn bar-btn--ghost">Select all</button>
           <button id="clear-btn" class="bar-btn bar-btn--ghost" disabled>Clear</button>
+          <button id="download-btn" class="bar-btn bar-btn--ghost" disabled>⤓ Download originals</button>
           <button id="import-btn" class="bar-btn bar-btn--primary" disabled>↓ Import to project</button>
         </div>
       </footer>
@@ -225,6 +240,17 @@
 
         <div class="modal-section-label">PRODUCT SKUS</div>
         <div id="modal-sku-tags" class="modal-tags"></div>
+
+        <div id="modal-label-row" style="display:flex;gap:8px;margin:8px 0">
+          <div style="flex:1">
+            <div class="modal-section-label">MONTH</div>
+            <input id="modal-month-input" type="text" placeholder="e.g. June" class="modal-label-input" style="width:100%;box-sizing:border-box;background:var(--surface-2,rgba(255,255,255,0.05));border:1px solid var(--border,rgba(255,255,255,0.1));border-radius:6px;padding:4px 8px;font-size:11px;color:var(--text,#fff)">
+          </div>
+          <div style="flex:1">
+            <div class="modal-section-label">ANGLE</div>
+            <input id="modal-angle-input" type="text" placeholder="e.g. Angle 1" class="modal-label-input" style="width:100%;box-sizing:border-box;background:var(--surface-2,rgba(255,255,255,0.05));border:1px solid var(--border,rgba(255,255,255,0.1));border-radius:6px;padding:4px 8px;font-size:11px;color:var(--text,#fff)">
+          </div>
+        </div>
 
         <div id="modal-stats-grid">
           <div class="stat-cell"><div class="stat-label">DURATION</div><div class="stat-value" id="stat-duration">—</div></div>
