@@ -33,6 +33,8 @@ interface Clip {
   hasThumbnail: boolean;
   hasSpriteSheet: boolean;
   shotType?: string | null;
+  month?: string | null;
+  angle?: string | null;
   tags?: string[] | null;
   productSkus?: string[] | null;
   driveFileId?: string | null;
@@ -60,7 +62,7 @@ function FilterDropdown({
   options: [string, number][];
   selected: Set<string>;
   onToggle: (val: string) => void;
-  accentColor?: "emerald" | "neutral";
+  accentColor?: "emerald" | "neutral" | "sky" | "amber";
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -74,30 +76,30 @@ function FilterDropdown({
   }, [open]);
 
   const activeCount = selected.size;
-  // Colours must match the pill colours used on each clip card:
-  //   neutral → shot type (grey)
-  //   emerald → SKUs
-  //   default (accent) → tags
-  const activeBg =
-    accentColor === "emerald"
-      ? "bg-emerald-500"
-      : accentColor === "neutral"
-        ? "bg-neutral-600"
-        : "bg-accent";
-  const checkColor =
-    accentColor === "emerald"
-      ? "text-emerald-400"
-      : accentColor === "neutral"
-        ? "text-neutral-300"
-        : "text-accent";
+  // Full literal class strings per accent so Tailwind's JIT can see them.
+  //   neutral → shot type (grey), emerald → SKUs, sky → month, amber → angle,
+  //   default (accent) → tags. Typed Record so an absent accent falls through.
+  const key = accentColor ?? "";
+  const activeBg = ({
+    emerald: "bg-emerald-500",
+    neutral: "bg-neutral-600",
+    sky: "bg-sky-500",
+    amber: "bg-amber-500",
+  } as Record<string, string>)[key] ?? "bg-accent";
+  const checkColor = ({
+    emerald: "text-emerald-400",
+    neutral: "text-neutral-300",
+    sky: "text-sky-400",
+    amber: "text-amber-400",
+  } as Record<string, string>)[key] ?? "text-accent";
   // Inactive-state colours — a subtle tinted background + coloured text
   // so each filter's identity is visible even before you select anything.
-  const inactiveClasses =
-    accentColor === "emerald"
-      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15 hover:border-emerald-500/50"
-      : accentColor === "neutral"
-        ? "bg-neutral-500/10 border-neutral-500/30 text-neutral-300 hover:bg-neutral-500/15 hover:border-neutral-500/50"
-        : "bg-accent/10 border-accent/30 text-accent hover:bg-accent/15 hover:border-accent/50";
+  const inactiveClasses = ({
+    emerald: "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15 hover:border-emerald-500/50",
+    neutral: "bg-neutral-500/10 border-neutral-500/30 text-neutral-300 hover:bg-neutral-500/15 hover:border-neutral-500/50",
+    sky: "bg-sky-500/10 border-sky-500/30 text-sky-300 hover:bg-sky-500/15 hover:border-sky-500/50",
+    amber: "bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/15 hover:border-amber-500/50",
+  } as Record<string, string>)[key] ?? "bg-accent/10 border-accent/30 text-accent hover:bg-accent/15 hover:border-accent/50";
 
   return (
     <div className="relative" ref={ref}>
@@ -165,6 +167,8 @@ export default function ClientDetailPage() {
   const [clips, setClips] = useState<Clip[]>([]);
   const [search, setSearch] = useState("");
   const [selectedShotTypes, setSelectedShotTypes] = useState<Set<string>>(new Set());
+  const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set());
+  const [selectedAngles, setSelectedAngles] = useState<Set<string>>(new Set());
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -271,6 +275,23 @@ export default function ClientDetailPage() {
     return Array.from(types.entries()).sort((a, b) => b[1] - a[1]);
   }, [clips]);
 
+  // Get unique months + angles with counts (auto-derived from the Drive path)
+  const allMonths = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const clip of clips) {
+      if (clip.month) m.set(clip.month, (m.get(clip.month) || 0) + 1);
+    }
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  }, [clips]);
+
+  const allAngles = useMemo(() => {
+    const a = new Map<string, number>();
+    for (const clip of clips) {
+      if (clip.angle) a.set(clip.angle, (a.get(clip.angle) || 0) + 1);
+    }
+    return Array.from(a.entries()).sort((x, y) => y[1] - x[1]);
+  }, [clips]);
+
   // Get unique tags with counts
   const allTags = useMemo(() => {
     const tagMap = new Map<string, number>();
@@ -315,6 +336,8 @@ export default function ClientDetailPage() {
           clip.originalFilename || "",
           clip.description || "",
           clip.shotType || "",
+          clip.month || "",
+          clip.angle || "",
           ...(clip.tags || []),
           ...(clip.productSkus || []),
         ]
@@ -323,6 +346,8 @@ export default function ClientDetailPage() {
         matchesSearch = searchTerms.every((term) => haystack.includes(term));
       }
       const matchesShotType = selectedShotTypes.size === 0 || (clip.shotType && selectedShotTypes.has(clip.shotType));
+      const matchesMonth = selectedMonths.size === 0 || (clip.month != null && selectedMonths.has(clip.month));
+      const matchesAngle = selectedAngles.size === 0 || (clip.angle != null && selectedAngles.has(clip.angle));
       const matchesTags =
         selectedTags.size === 0 ||
         (clip.tags && Array.from(selectedTags).every((t) => clip.tags!.includes(t)));
@@ -337,15 +362,33 @@ export default function ClientDetailPage() {
         rollFilter === "all" ||
         (rollFilter === "aroll" && clip.hasSpeech === true) ||
         (rollFilter === "broll" && clip.hasSpeech === false);
-      return matchesSearch && matchesShotType && matchesTags && matchesSkus && matchesOrientation && matchesRoll;
+      return matchesSearch && matchesShotType && matchesMonth && matchesAngle && matchesTags && matchesSkus && matchesOrientation && matchesRoll;
     });
-  }, [clips, search, selectedShotTypes, selectedTags, selectedSkus, collectionClipIds, orientationFilter, rollFilter]);
+  }, [clips, search, selectedShotTypes, selectedMonths, selectedAngles, selectedTags, selectedSkus, collectionClipIds, orientationFilter, rollFilter]);
 
   const toggleShotType = useCallback((type: string) => {
     setSelectedShotTypes((prev) => {
       const next = new Set(prev);
       if (next.has(type)) next.delete(type);
       else next.add(type);
+      return next;
+    });
+  }, []);
+
+  const toggleMonth = useCallback((month: string) => {
+    setSelectedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(month)) next.delete(month);
+      else next.add(month);
+      return next;
+    });
+  }, []);
+
+  const toggleAngle = useCallback((angle: string) => {
+    setSelectedAngles((prev) => {
+      const next = new Set(prev);
+      if (next.has(angle)) next.delete(angle);
+      else next.add(angle);
       return next;
     });
   }, []);
@@ -376,6 +419,8 @@ export default function ClientDetailPage() {
 
   const clearFilters = useCallback(() => {
     setSelectedShotTypes(new Set());
+    setSelectedMonths(new Set());
+    setSelectedAngles(new Set());
     setSelectedTags(new Set());
     setSelectedSkus(new Set());
     setSearch("");
@@ -697,6 +742,28 @@ export default function ClientDetailPage() {
               />
             )}
 
+            {/* Month dropdown (auto-derived from Drive Client>Month>Angle) */}
+            {allMonths.length > 0 && (
+              <FilterDropdown
+                label="Month"
+                options={allMonths}
+                selected={selectedMonths}
+                onToggle={toggleMonth}
+                accentColor="sky"
+              />
+            )}
+
+            {/* Angle dropdown (auto-derived from Drive Client>Month>Angle) */}
+            {allAngles.length > 0 && (
+              <FilterDropdown
+                label="Angle"
+                options={allAngles}
+                selected={selectedAngles}
+                onToggle={toggleAngle}
+                accentColor="amber"
+              />
+            )}
+
             {/* Tags dropdown */}
             {allTags.length > 0 && (
               <FilterDropdown
@@ -783,11 +850,13 @@ export default function ClientDetailPage() {
             </div>
 
             {/* Active filters & clear */}
-            {(selectedShotTypes.size > 0 || selectedTags.size > 0 || selectedSkus.size > 0 || orientationFilter !== "all" || rollFilter !== "all") && (
+            {(selectedShotTypes.size > 0 || selectedMonths.size > 0 || selectedAngles.size > 0 || selectedTags.size > 0 || selectedSkus.size > 0 || orientationFilter !== "all" || rollFilter !== "all") && (
               <>
                 <span className="text-xs text-muted ml-1">
                   {[
                     selectedShotTypes.size > 0 && `${selectedShotTypes.size} shot${selectedShotTypes.size > 1 ? "s" : ""}`,
+                    selectedMonths.size > 0 && `${selectedMonths.size} month${selectedMonths.size > 1 ? "s" : ""}`,
+                    selectedAngles.size > 0 && `${selectedAngles.size} angle${selectedAngles.size > 1 ? "s" : ""}`,
                     selectedTags.size > 0 && `${selectedTags.size} tag${selectedTags.size > 1 ? "s" : ""}`,
                     selectedSkus.size > 0 && `${selectedSkus.size} SKU${selectedSkus.size > 1 ? "s" : ""}`,
                     orientationFilter !== "all" && orientationFilter,

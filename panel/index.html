@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fraggell Footage</title>
+  <link rel="stylesheet" href="./css/main.css" />
+</head>
+<body>
+
+  <!-- Login screen -->
+  <div class="screen screen--active" id="screen-login">
+    <div class="connect-card">
+      <div class="logo-mark logo-mark--lg">F</div>
+      <h1 class="connect-title">FootageStore</h1>
+      <p class="connect-sub">Sign in with your FootageStore account</p>
+      <div class="login-form">
+        <div class="form-field">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="you@fraggellproductions.com" autocomplete="email" />
+        </div>
+        <div class="form-field">
+          <label>Password</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <label class="remember-row">
+          <input type="checkbox" id="remember-me"> Remember me
+        </label>
+        <div id="login-error" class="login-error"></div>
+        <button class="connect-btn" id="login-btn">Sign in</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connecting screen -->
+  <div class="screen" id="screen-connecting">
+    <div class="connect-card">
+      <div class="logo-mark logo-mark--lg">F</div>
+      <h1 class="connect-title">FootageStore</h1>
+      <p class="connect-sub" id="connecting-msg">Connecting...</p>
+      <div class="spinner spinner--lg"></div>
+    </div>
+  </div>
+
+  <!-- Not connected screen -->
+  <div class="screen" id="screen-not-connected">
+    <div class="connect-card">
+      <div class="logo-mark logo-mark--lg logo-mark--warn">!</div>
+      <h1 class="connect-title">Not Connected</h1>
+      <p class="connect-sub" id="not-connected-msg">Google Drive Desktop doesn't appear to be running.</p>
+      <div class="connect-steps">
+        <div class="step"><span class="step-num">1</span><span>Open <strong>Google Drive</strong> on your computer</span></div>
+        <div class="step"><span class="step-num">2</span><span>Sign in and wait for the Shared Drive to sync</span></div>
+        <div class="step"><span class="step-num">3</span><span>Click <strong>Retry</strong> below</span></div>
+      </div>
+      <button class="connect-btn" id="retry-btn">↺ Retry</button>
+    </div>
+  </div>
+
+  <!-- Drive Picker screen -->
+  <div class="screen" id="screen-drive-picker">
+    <div class="connect-card connect-card--wide">
+      <div class="logo-mark logo-mark--lg">F</div>
+      <h1 class="connect-title">Choose Shared Drive</h1>
+      <p class="connect-sub">Multiple Shared Drives found.<br>Select the Fraggell footage library.</p>
+      <div class="drive-picker-list" id="drive-picker-list"></div>
+    </div>
+  </div>
+
+  <!-- Main Panel -->
+  <div class="screen" id="screen-panel">
+    <div id="app">
+
+      <!-- Session expired banner -->
+      <div id="session-expired-banner">
+        <span>Your session has expired.</span>
+        <button id="session-signin-btn">Sign in again</button>
+      </div>
+
+      <!-- Header -->
+      <header id="header">
+        <div class="header-logo">
+          <div class="logo-mark">F</div>
+          <span>FootageStore</span>
+        </div>
+        <div class="header-spacer"></div>
+        <div class="header-project"><span id="project-name">No project open</span></div>
+        <button id="download-toggle" class="icon-btn icon-btn--toggle" title="Download footage if not found on Shared Drive" aria-pressed="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="8 17 12 21 16 17"/>
+            <line x1="12" y1="12" x2="12" y2="21"/>
+            <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
+          </svg>
+        </button>
+        <button id="change-drive-btn" class="icon-btn" title="Change Shared Drive folder">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button id="logout-btn" class="icon-btn" title="Sign out">↩</button>
+        <span id="update-badge" style="display:none;align-items:center;height:20px;padding:0 8px;border-radius:20px;font-size:9.5px;font-weight:700;background:var(--accent-dim);border:1px solid var(--tag-border);color:var(--accent);cursor:pointer;white-space:nowrap;" title="Click to install update"></span>
+        <button id="check-update-btn" class="icon-btn" title="Check for updates">↑</button>
+        <button id="refresh-btn" class="icon-btn" title="Refresh">↺</button>
+      </header>
+
+      <!-- Body -->
+      <main id="body">
+
+        <!-- Sidebar -->
+        <nav id="sidebar">
+          <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search footage..." autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="sidebar-code-search">
+            <input type="text" id="code-input" placeholder="Find by clip code..." autocomplete="off" spellcheck="false" maxlength="6" />
+          </div>
+          <div class="sidebar-section-label">Clients</div>
+          <div id="client-list"></div>
+        </nav>
+
+        <!-- Content -->
+        <section id="content">
+
+          <!-- Topbar -->
+          <div id="topbar">
+            <div id="breadcrumb">
+              <span id="content-title"></span>
+              <span id="clip-count-badge"></span>
+            </div>
+            <div id="filter-row">
+              <div class="filter-dropdown" id="fd-shottype">
+                <button class="filter-btn" id="fb-shottype">
+                  <span id="fb-shottype-label">Shot Type</span>
+                  <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <div class="filter-menu" id="fm-shottype"></div>
+              </div>
+              <div class="filter-dropdown" id="fd-tags">
+                <button class="filter-btn" id="fb-tags">
+                  <span id="fb-tags-label">Tags</span>
+                  <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <div class="filter-menu" id="fm-tags"></div>
+              </div>
+              <div class="filter-dropdown" id="fd-skus">
+                <button class="filter-btn" id="fb-skus">
+                  <span id="fb-skus-label">SKU</span>
+                  <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <div class="filter-menu" id="fm-skus"></div>
+              </div>
+              <div id="active-filters"></div>
+            </div>
+            <div id="topbar-right">
+              <div id="grid-size-btns">
+                <button class="gs-btn" data-size="lg" title="Large">
+                  <svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+                </button>
+                <button class="gs-btn gs-btn--active" data-size="md" title="Medium">
+                  <svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="1" width="5.5" height="5.5" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="7.5" y="1" width="5.5" height="5.5" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="1" y="7.5" width="5.5" height="5.5" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+                </button>
+                <button class="gs-btn" data-size="sm" title="Small">
+                  <svg width="14" height="14" viewBox="0 0 14 14"><rect x="0.5" y="0.5" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="5.2" y="0.5" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="9.9" y="0.5" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="0.5" y="5.2" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="5.2" y="5.2" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="9.9" y="5.2" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="0.5" y="9.9" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="5.2" y="9.9" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="9.9" y="9.9" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Grid -->
+          <div id="clip-grid-wrapper">
+            <div class="clip-grid clip-grid--md" id="clip-grid"></div>
+            <div id="load-more-row">
+              <button id="load-more-btn">Load more clips</button>
+            </div>
+          </div>
+
+        </section>
+      </main>
+
+      <!-- Bottom bar -->
+      <footer id="bottom-bar">
+        <span id="bottom-label">No clips selected</span>
+        <div id="bottom-actions">
+          <button id="select-all-btn" class="bar-btn bar-btn--ghost">Select all</button>
+          <button id="clear-btn" class="bar-btn bar-btn--ghost" disabled>Clear</button>
+          <button id="import-btn" class="bar-btn bar-btn--primary" disabled>↓ Import to project</button>
+        </div>
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- Clip modal -->
+  <div id="modal-overlay">
+    <div id="modal">
+      <div id="modal-left">
+        <div id="modal-media-wrap">
+          <video id="modal-video" preload="metadata" playsinline></video>
+          <div id="modal-no-video"><span id="modal-ext-icon">▶</span><span id="modal-ext-label"></span></div>
+        </div>
+        <div id="modal-controls">
+          <button id="modal-play-btn" class="ctrl-btn">▶</button>
+          <div id="modal-scrub-track"><div id="modal-scrub-fill"></div><div id="modal-scrub-thumb"></div></div>
+          <span id="modal-time">0:00 / 0:00</span>
+        </div>
+      </div>
+      <div id="modal-right">
+        <div id="modal-header">
+          <h2 id="modal-title"></h2>
+          <button id="modal-close"><svg viewBox="0 0 24 24" width="15" height="15"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        </div>
+        <div id="modal-date"></div>
+
+        <div class="modal-section-label">CLIP CODE</div>
+        <div id="modal-code-row">
+          <span id="modal-clip-code"></span>
+          <button id="modal-code-copy-btn" title="Copy clip code">
+            <svg viewBox="0 0 24 24" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
+          </button>
+        </div>
+
+        <div class="modal-section-label">SHOT TYPE</div>
+        <div id="modal-shot-tags" class="modal-tags"></div>
+
+        <div class="modal-section-label">TAGS</div>
+        <div id="modal-clip-tags" class="modal-tags"></div>
+
+        <div class="modal-section-label">PRODUCT SKUS</div>
+        <div id="modal-sku-tags" class="modal-tags"></div>
+
+        <div id="modal-stats-grid">
+          <div class="stat-cell"><div class="stat-label">DURATION</div><div class="stat-value" id="stat-duration">—</div></div>
+          <div class="stat-cell"><div class="stat-label">RESOLUTION</div><div class="stat-value" id="stat-resolution">—</div></div>
+          <div class="stat-cell"><div class="stat-label">FILE SIZE</div><div class="stat-value" id="stat-size">—</div></div>
+          <div class="stat-cell"><div class="stat-label">CODEC</div><div class="stat-value" id="stat-codec">—</div></div>
+          <div class="stat-cell"><div class="stat-label">FPS</div><div class="stat-value" id="stat-fps">—</div></div>
+          <div class="stat-cell"><div class="stat-label">FORMAT</div><div class="stat-value" id="stat-format">—</div></div>
+        </div>
+
+        <div class="modal-section-label">AI DESCRIPTION</div>
+        <div id="modal-description" class="modal-description"></div>
+        <button id="modal-desc-more" class="modal-desc-more">See more</button>
+
+        <div class="modal-section-label">ORIGINAL FILENAME</div>
+        <div id="modal-filename-row">
+          <span id="modal-filename"></span>
+          <button id="modal-copy-btn" title="Copy">
+            <svg viewBox="0 0 24 24" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
+          </button>
+        </div>
+
+        <div id="modal-footer-actions">
+          <button id="modal-import-btn" class="modal-action-btn modal-action-btn--primary">↓ Import to Project</button>
+          <button id="modal-gdrive-btn" class="modal-action-btn modal-action-btn--secondary">
+            <svg width="13" height="13" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg"><path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/><path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/><path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/><path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/><path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/><path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/></svg>&#10;            Open in Google Drive
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dl-overlay">
+  <div id="dl-card">
+    <div id="dl-title">Downloading footage...</div>
+    <div id="dl-sub">0 MB / 0 MB</div>
+    <div id="dl-bar-track"><div id="dl-bar-fill"></div></div>
+    <div id="dl-pct">0%</div>
+  </div>
+</div>
+<div id="toast-container"></div>
+  <script src="./js/CSInterface.js"></script>
+  <script src="./js/platform.js"></script>
+  <script src="./js/utils.js"></script>
+  <script src="./js/main.js"></script>
+</body>
+</html>

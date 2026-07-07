@@ -226,6 +226,10 @@ export interface DriveFile {
   mimeType: string;
   size: number;
   createdTime: string;
+  // Folder names between the client root and this file, e.g. ["June", "Angle 1"]
+  // for a Client > June > Angle 1 > clip.mov layout. Empty for files sitting
+  // directly in the client folder. Only populated by listFilesInFolder.
+  relativePath?: string[];
 }
 
 /**
@@ -270,10 +274,15 @@ export async function listClientFolders(): Promise<DriveFile[]> {
 export async function listFilesInFolder(folderId: string): Promise<DriveFile[]> {
   const drive = getDrive();
   const files: DriveFile[] = [];
-  const foldersToScan = [folderId];
+  // Track the folder-name path down from the client root alongside each folder
+  // id so files can record which Month/Angle subfolders they came from. The
+  // root folder itself contributes no segment.
+  const foldersToScan: Array<{ id: string; segments: string[] }> = [
+    { id: folderId, segments: [] },
+  ];
 
   while (foldersToScan.length > 0) {
-    const currentFolderId = foldersToScan.pop()!;
+    const { id: currentFolderId, segments } = foldersToScan.pop()!;
     let pageToken: string | undefined;
 
     do {
@@ -288,8 +297,8 @@ export async function listFilesInFolder(folderId: string): Promise<DriveFile[]> 
 
       for (const f of res.data.files || []) {
         if (f.mimeType === "application/vnd.google-apps.folder") {
-          // Queue subfolder for scanning
-          foldersToScan.push(f.id!);
+          // Queue subfolder for scanning, extending the path with its name
+          foldersToScan.push({ id: f.id!, segments: [...segments, f.name!] });
         } else {
           files.push({
             id: f.id!,
@@ -297,6 +306,7 @@ export async function listFilesInFolder(folderId: string): Promise<DriveFile[]> 
             mimeType: f.mimeType!,
             size: parseInt(f.size || "0", 10),
             createdTime: f.createdTime!,
+            relativePath: segments,
           });
         }
       }
