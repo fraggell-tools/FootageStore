@@ -67,6 +67,17 @@ Scope decisions locked with Nick:
 
 ---
 
+## ⚠️ Panel batch — REQUIRED security fix (do with the panel work)
+
+Automated review flagged a **CRITICAL XSS in `panel/js/main.js`** (pre-existing, came in with the extraction): clip cards + modal tags are built via `innerHTML` string concatenation with **unescaped** values from the API/Drive (`clip.name`, `originalFilename`, `shotType`, `tags`, `productSkus`, `code`, and now `month`/`angle` from Drive folder names). In a CEP panel (Node integration) XSS can escalate to RCE on the editor's machine. Adding month/angle display feeds Drive folder names straight into these same sinks, so this MUST be fixed as part of the panel batch:
+- Add an `esc()` helper and wrap **every** untrusted interpolation (existing + new), or refactor `renderClipGrid`/`populateModalMeta`/`buildMenu`/`updateActiveTags`/drive-picker to `createElement` + `textContent`.
+- Defense in depth: strip control chars + cap length on `month`/`angle`/`shotType` in the PATCH route server-side (length cap already done; add control-char strip).
+
+## Validation status (2026-07-07)
+- Branch `feat/month-angle-labels` pushed (5 commits). Local `tsc --noEmit` clean; server-side `docker compose build` of **both** app + worker images succeeded (isolated `fs_validate` project + worktree, prod containers untouched, artifacts cleaned up). Caught + fixed: missing package-lock for aws-sdk, and a strict-mode type error in the accent-colour map.
+- **NOT merged to main.** Server `main` is at `e7cd555`, ahead of the branch base `f5d855b` — reconcile (rebase/merge) before deploy.
+- R2 live: bucket `footagestore-proxies` created, review-app credentials (account-scoped, verified) in FootageStore `.env`.
+
 ## Phase 3 — Panel proxy preview
 
 - `panel/js/main.js`: point the preview `<video>` at `API_BASE + /api/clips/{id}/proxy` (progressive MP4 — no hls.js). Keep original `/download` for import.
