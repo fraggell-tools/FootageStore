@@ -151,15 +151,27 @@ export async function runDriveSync() {
       existingClips.filter((c) => c.driveFileId).map((c) => [c.driveFileId!, c])
     );
 
-    // Derive month + angle labels from the Drive folder path. The layout is
-    // Client > Month > Angle > …, so the first two path segments below the
-    // client root are the month and angle. Sliced to the column widths so an
-    // unusually long folder name can never fail the insert (cf. the file_size
-    // int4 overflow incident).
-    const deriveMonthAngle = (relativePath?: string[]) => ({
-      month: relativePath?.[0]?.slice(0, 50) ?? null,
-      angle: relativePath?.[1]?.slice(0, 100) ?? null,
-    });
+    // Derive month + angle from the Drive folder path. The intended layout is
+    // Client > Month > Angle > …, but real clients vary (some organise by creator
+    // name, some keep files flat). So we ONLY treat a folder as a "month" when it
+    // actually looks like one — otherwise creator names (e.g. "Adrienne Dzema")
+    // would land in the month column. We find the first path segment matching a
+    // month pattern and take the NEXT segment as the angle (handles both
+    // Client>Month>Angle and Client>Creator>Month>Angle). Sliced to column widths
+    // so an odd folder name can never fail the insert (cf. the file_size incident).
+    const looksLikeMonth = (s: string) =>
+      /^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t)?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/i.test(s) || // month name
+      /^\d{4}[-_ /]\d{1,2}$/.test(s) || // 2026-06
+      /^(m|month)\s?\d{1,2}$/i.test(s); // M5, Month 5
+    const deriveMonthAngle = (relativePath?: string[]) => {
+      const segs = relativePath ?? [];
+      const idx = segs.findIndex(looksLikeMonth);
+      if (idx === -1) return { month: null, angle: null };
+      return {
+        month: segs[idx].slice(0, 50),
+        angle: segs[idx + 1]?.slice(0, 100) ?? null,
+      };
+    };
 
     // Create clips for new files; reassign clips whose file now lives under a
     // different client's folder, and keep month/angle in sync with the Drive path.
