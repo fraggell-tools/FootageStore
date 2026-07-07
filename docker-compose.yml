@@ -43,7 +43,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    # GPU access for NVENC proxy encoding (GTX 1080 Ti via the nvidia runtime).
+    # Falls back to libx264 automatically if the GPU/NVENC isn't available.
+    runtime: nvidia
     environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
       - DATABASE_URL=postgresql://footagestore:footagestore@db:5432/footagestore
       - REDIS_URL=redis://redis:6379
       - DATA_DIR=/data
