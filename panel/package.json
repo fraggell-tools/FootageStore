@@ -1,0 +1,11 @@
+{
+  "name": "fraggell-footage-panel",
+  "version": "1.0.0",
+  "description": "Fraggell Footage Panel — Premiere Pro CEP extension",
+  "scripts": {
+    "test": "node test/run.js"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

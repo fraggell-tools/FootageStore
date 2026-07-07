@@ -1,0 +1,22 @@
+FRAGGELL FOOTAGE PANEL — MAC INSTALLATION
+==========================================
+
+INSTALL
+-------
+1. Close Adobe Premiere Pro
+2. Open Terminal (Applications > Utilities > Terminal)
+3. Copy and paste this command and press Enter:
+
+curl -fsSL https://footagestore.fraggell.com/install-panel.sh -o /tmp/fp-install.sh && bash /tmp/fp-install.sh && rm /tmp/fp-install.sh
+
+4. Enter your FootageStore email and password when prompted
+5. Open Premiere Pro → Window → Extensions → Fraggell Footage
+
+UPDATING
+--------
+Run the same command again with Premiere closed.
+Or click the "Update available" badge inside the panel.
+
+PROBLEMS?
+---------
+Contact Nick Beddows — nick@fraggellproductions.com
