@@ -15,6 +15,13 @@
       "when": 1780653059974,
       "tag": "0001_clip_filesize_bigint",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783092308507,
+      "tag": "0002_imports_table",
+      "breakpoints": true
     }
   ]
 }

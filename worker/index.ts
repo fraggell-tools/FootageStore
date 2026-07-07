@@ -1,6 +1,7 @@
 import { Worker } from "bullmq";
 import { createRedisConnection } from "../src/lib/redis";
 import { processClip } from "./processors/processClip";
+import { importDrive } from "./processors/importDrive";
 import { HEALTH_KEYS, WORKER_HEARTBEAT_INTERVAL_MS } from "../src/lib/health";
 
 console.log("[Worker] Starting clip-processing worker...");
@@ -23,10 +24,16 @@ const worker = new Worker(
   "clip-processing",
   async (job) => {
     recordJobActivity();
-    console.log(`[Worker] Job ${job.id} started — clipId: ${job.data.clipId}`);
-    await processClip(job.data);
+    if (job.name === "import-drive") {
+      console.log(`[Worker] Job ${job.id} started — import: ${job.data.importId}`);
+      await importDrive(job.data);
+      console.log(`[Worker] Job ${job.id} completed — import: ${job.data.importId}`);
+    } else {
+      console.log(`[Worker] Job ${job.id} started — clipId: ${job.data.clipId}`);
+      await processClip(job.data);
+      console.log(`[Worker] Job ${job.id} completed — clipId: ${job.data.clipId}`);
+    }
     recordJobActivity();
-    console.log(`[Worker] Job ${job.id} completed — clipId: ${job.data.clipId}`);
   },
   {
     connection: createRedisConnection(),
