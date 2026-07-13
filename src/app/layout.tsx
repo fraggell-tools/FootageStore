@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Sora, Bricolage_Grotesque } from "next/font/google";
+import { Sora, Bricolage_Grotesque, Geist_Mono } from "next/font/google";
 import { SessionProvider } from "next-auth/react";
 import "./globals.css";
 
@@ -8,6 +8,11 @@ const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
   weight: ["500", "600", "700", "800"],
   variable: "--font-bricolage",
+  display: "swap",
+});
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
   display: "swap",
 });
 
@@ -22,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${sora.variable} ${bricolage.variable} h-full antialiased`} style={{ fontFamily: "var(--font-sora), system-ui, sans-serif" }}>
+    <html lang="en" className={`${sora.variable} ${bricolage.variable} ${geistMono.variable} h-full antialiased`} style={{ fontFamily: "var(--font-sora), system-ui, sans-serif" }}>
       <head>
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script src="/theme-init.js" />

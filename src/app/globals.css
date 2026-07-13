@@ -10,6 +10,16 @@
   --color-border: #E8E8E8;
   --color-fg: #141414;
   --color-muted: #6F6F6F;
+
+  /* Shared Fraggell sidebar tokens (match fraggell-review, flip with theme) */
+  --fg:          #141414;
+  --muted:       #6F6F6F;
+  --quiet:       #9A9A9A;
+  --pink:        #C60D60;
+  --sidebar-bg:     #FAFAFA;
+  --sidebar-active: #F0F0F0;
+  --sidebar-hover:  #F4F4F4;
+  --sidebar-border: #E8E8E8;
 }
 
 html[data-theme="dark"] {
@@ -19,6 +29,15 @@ html[data-theme="dark"] {
   --color-border: #232323;
   --color-fg: #e5e5e5;
   --color-muted: #737373;
+
+  /* Shared Fraggell sidebar tokens — dark variant (match fraggell-review) */
+  --fg:          #F1F1F1;
+  --muted:       #A0A0A4;
+  --quiet:       #737378;
+  --sidebar-bg:     #121014;
+  --sidebar-active: #2C1A24;
+  --sidebar-hover:  #221A1F;
+  --sidebar-border: #352830;
 }
 
 body {

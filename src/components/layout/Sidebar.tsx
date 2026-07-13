@@ -50,15 +50,48 @@ const adminItems = [
 ];
 
 const monoStyle: React.CSSProperties = {
-  fontFamily: "'Geist Mono', 'SF Mono', monospace",
+  fontFamily: "var(--font-geist-mono), 'Geist Mono', 'SF Mono', monospace",
   fontSize: "0.6875rem",
   fontWeight: 500,
   letterSpacing: "0.1em",
   textTransform: "uppercase" as const,
-  color: "#6F6F6F",
+  color: "var(--muted)",
 };
 
-export default function Sidebar() {
+function rowStyle(active: boolean, collapsed: boolean): React.CSSProperties {
+  return {
+    position: "relative",
+    fontSize: 14,
+    fontWeight: 500,
+    color: active ? "var(--fg)" : "var(--quiet)",
+    textDecoration: "none",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: collapsed ? "center" : "flex-start",
+    gap: collapsed ? 0 : 12,
+    padding: collapsed ? "8px 0" : "8px 12px",
+    borderRadius: 6,
+    marginBottom: 2,
+    width: "100%",
+    background: active ? "var(--sidebar-active)" : "transparent",
+    transition: "color 0.14s, background 0.14s",
+  };
+}
+
+const rowHover = {
+  onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+    if (e.currentTarget.dataset.active === "true") return;
+    e.currentTarget.style.background = "var(--sidebar-hover)";
+    e.currentTarget.style.color = "var(--fg)";
+  },
+  onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+    if (e.currentTarget.dataset.active === "true") return;
+    e.currentTarget.style.background = "";
+    e.currentTarget.style.color = "var(--quiet)";
+  },
+};
+
+export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
@@ -97,238 +130,185 @@ export default function Sidebar() {
     }
   }
 
+  async function handleSync() {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      const data = await res.json();
+      const parts = [];
+      if (data.clientsCreated) parts.push(`+${data.clientsCreated} clients`);
+      if (data.clipsCreated) parts.push(`+${data.clipsCreated} clips`);
+      if (data.clientsRemoved) parts.push(`-${data.clientsRemoved} clients`);
+      if (data.clipsRemoved) parts.push(`-${data.clipsRemoved} clips`);
+      setSyncResult(parts.length > 0 ? parts.join(", ") : "Up to date");
+      if (parts.length > 0) window.location.reload();
+      setTimeout(() => setSyncResult(null), 4000);
+    } catch {
+      setSyncResult("Sync failed");
+      setTimeout(() => setSyncResult(null), 4000);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function navRow(item: { href: string; label: string; icon: React.ReactNode }) {
+    const active = isActive(item.href);
+    return (
+      <Link key={item.href} href={item.href} data-active={active} style={rowStyle(active, collapsed)} title={collapsed ? item.label : undefined} {...rowHover}>
+        {active && <span aria-hidden style={{ position: "absolute", top: 6, bottom: 6, left: 0, width: 2, borderRadius: 9999, background: "#C60D60" }} />}
+        <span style={{ color: active ? "#C60D60" : "var(--muted)", display: "flex" }}>{item.icon}</span>
+        {!collapsed && item.label}
+      </Link>
+    );
+  }
+
   return (
-    <aside
-      className="fixed left-0 top-0 bottom-0 w-56 flex flex-col z-20"
-      style={{ background: "#141414", borderRight: "1px solid #2A2A2A" }}
-    >
-      {/* Brand stamp */}
-      <div className="px-4 py-3.5 flex items-center" style={{ borderBottom: "1px solid #2A2A2A" }}>
-        <span className="font-display font-semibold leading-none" style={{ fontSize: 17, letterSpacing: "-0.015em", color: "#F5F5F5" }}>Fraggell</span>
-        <span className="font-display font-semibold leading-none" style={{ fontSize: 17, color: "#C60D60" }}>.</span>
-        <span className="font-display font-medium leading-none" style={{ fontSize: 17, letterSpacing: "-0.015em", color: "#8F8F8F" }}>footage</span>
-      </div>
-
-      {/* Find a clip by its shareable code */}
-      <div className="px-3 py-3" style={{ borderBottom: "1px solid #2A2A2A" }}>
-        <form onSubmit={handleLookup}>
-          <div className="relative">
-            <svg
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-              style={{ color: "#6F6F6F" }}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              value={codeInput}
-              onChange={(e) => {
-                setCodeInput(e.target.value.toUpperCase());
-                if (lookupError) setLookupError(null);
-              }}
-              placeholder="Find clip by code"
-              maxLength={12}
-              disabled={looking}
-              aria-label="Find a clip by its code"
-              className="w-full rounded-md pl-8 pr-3 py-1.5 text-sm transition-colors focus:outline-none disabled:opacity-50 placeholder:text-[#6F6F6F]"
-              style={{
-                background: "#1a1a1a",
-                border: "1px solid #2A2A2A",
-                color: "#F5F5F5",
-                fontFamily: "'Geist Mono', 'SF Mono', monospace",
-              }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "#C60D60"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "#2A2A2A"; }}
-            />
-          </div>
-          {lookupError && (
-            <p className="mt-1.5 text-[11px] leading-snug" style={{ color: "#E0566F" }}>
-              {lookupError}
-            </p>
-          )}
-        </form>
-      </div>
-
-      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-        {/* Hub back link */}
-        <a
-          href="https://hub.fraggell.com"
-          className="relative flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-          style={{ color: "#9A9A9A" }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "#1a1a1a"; e.currentTarget.style.color = "#F5F5F5"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = ""; e.currentTarget.style.color = "#9A9A9A"; }}
+    <>
+      {collapsed && (
+        <button
+          onClick={onToggle}
+          className="fixed z-30"
+          style={{ left: 8, top: 8, width: 36, height: 36, borderRadius: 10, border: "1px solid var(--sidebar-border)", background: "var(--sidebar-bg)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+          title="Expand sidebar"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "#6F6F6F" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          Fraggell Hub
-        </a>
-        <div style={{ height: 1, background: "#2A2A2A", margin: "4px 0" }} />
-
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="relative flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-            style={isActive(item.href)
-              ? { background: "#1f1f1f", color: "#F5F5F5" }
-              : { color: "#9A9A9A" }
-            }
-            onMouseEnter={(e) => { if (!isActive(item.href)) { e.currentTarget.style.background = "#1a1a1a"; e.currentTarget.style.color = "#F5F5F5"; } }}
-            onMouseLeave={(e) => { if (!isActive(item.href)) { e.currentTarget.style.background = ""; e.currentTarget.style.color = "#9A9A9A"; } }}
-          >
-            {isActive(item.href) && (
-              <span
-                aria-hidden
-                className="absolute inset-y-1.5 left-0 w-0.5 rounded-full"
-                style={{ background: "#C60D60" }}
-              />
-            )}
-            <span style={{ color: isActive(item.href) ? "#C60D60" : "#6F6F6F" }}>
-              {item.icon}
-            </span>
-            {item.label}
-          </Link>
-        ))}
-
-        {isAdmin && (
-          <>
-            <p style={{ ...monoStyle, paddingTop: "1.25rem", paddingBottom: "0.5rem", paddingLeft: "0.75rem" }}>Admin</p>
-            {adminItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="relative flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                style={isActive(item.href)
-                  ? { background: "#1f1f1f", color: "#F5F5F5" }
-                  : { color: "#9A9A9A" }
-                }
-                onMouseEnter={(e) => { if (!isActive(item.href)) { e.currentTarget.style.background = "#1a1a1a"; e.currentTarget.style.color = "#F5F5F5"; } }}
-                onMouseLeave={(e) => { if (!isActive(item.href)) { e.currentTarget.style.background = ""; e.currentTarget.style.color = "#9A9A9A"; } }}
-              >
-                {isActive(item.href) && (
-                  <span
-                    aria-hidden
-                    className="absolute inset-y-1.5 left-0 w-0.5 rounded-full"
-                    style={{ background: "#C60D60" }}
-                  />
-                )}
-                <span style={{ color: isActive(item.href) ? "#C60D60" : "#6F6F6F" }}>
-                  {item.icon}
-                </span>
-                {item.label}
-              </Link>
-            ))}
-            <button
-              onClick={async () => {
-                setSyncing(true);
-                setSyncResult(null);
-                try {
-                  const res = await fetch("/api/sync", { method: "POST" });
-                  const data = await res.json();
-                  const parts = [];
-                  if (data.clientsCreated) parts.push(`+${data.clientsCreated} clients`);
-                  if (data.clipsCreated) parts.push(`+${data.clipsCreated} clips`);
-                  if (data.clientsRemoved) parts.push(`-${data.clientsRemoved} clients`);
-                  if (data.clipsRemoved) parts.push(`-${data.clipsRemoved} clips`);
-                  setSyncResult(parts.length > 0 ? parts.join(", ") : "Up to date");
-                  if (parts.length > 0) window.location.reload();
-                  setTimeout(() => setSyncResult(null), 4000);
-                } catch {
-                  setSyncResult("Sync failed");
-                  setTimeout(() => setSyncResult(null), 4000);
-                } finally {
-                  setSyncing(false);
-                }
-              }}
-              disabled={syncing}
-              className="relative flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors w-full disabled:opacity-50"
-              style={{ color: "#9A9A9A" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#1a1a1a"; e.currentTarget.style.color = "#F5F5F5"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = ""; e.currentTarget.style.color = "#9A9A9A"; }}
-            >
-              <svg className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "#6F6F6F" }}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {syncing ? "Syncing..." : "Sync Drive"}
+          <span className="font-display" style={{ fontSize: 15, fontWeight: 600, color: "var(--fg)", lineHeight: 1 }}>F<span style={{ color: "#C60D60" }}>.</span></span>
+        </button>
+      )}
+      <aside
+        className="fixed left-0 top-0 bottom-0 flex flex-col z-20"
+        style={{ width: collapsed ? 0 : 224, background: "var(--sidebar-bg)", borderRight: collapsed ? "none" : "1px solid var(--sidebar-border)", overflow: "hidden", transition: "width 0.2s ease" }}
+      >
+        {/* Brand header */}
+        <div className="flex items-center" style={{ minHeight: 49, borderBottom: "1px solid var(--sidebar-border)", padding: collapsed ? "14px 0" : "14px 16px", justifyContent: collapsed ? "center" : "space-between" }}>
+          {collapsed ? (
+            <button onClick={onToggle} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }} title="Expand sidebar">
+              <span className="font-display" style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-0.015em", color: "var(--fg)", lineHeight: 1 }}>F<span style={{ color: "#C60D60" }}>.</span></span>
             </button>
-            {syncResult && (
-              <div
-                className={`mx-1 mt-1 flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-xs leading-snug ${
-                  syncResult === "Sync failed"
-                    ? "bg-red-500/10 border border-red-500/20 text-red-300"
-                    : syncResult === "Up to date"
-                      ? "bg-white/5 border border-white/10 text-neutral-300"
-                      : "text-[#C60D60]"
-                }`}
-                style={syncResult !== "Sync failed" && syncResult !== "Up to date" ? { background: "rgba(198,13,96,0.15)", border: "1px solid rgba(198,13,96,0.3)" } : {}}
-              >
-                <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  {syncResult === "Sync failed" ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  )}
-                </svg>
-                <span className="break-words">{syncResult}</span>
-              </div>
-            )}
-          </>
-        )}
-      </nav>
-
-      {/* User card */}
-      <div className="p-3" style={{ borderTop: "1px solid #2A2A2A" }}>
-        <div className="flex items-center gap-3 px-2 py-1.5">
-          {session?.user?.image ? (
-            <img
-              src={session.user.image}
-              alt={session.user.name || ""}
-              className="flex-shrink-0 rounded-full object-cover"
-              style={{ width: 36, height: 36 }}
-            />
           ) : (
-            <div
-              className="flex-shrink-0 flex items-center justify-center rounded-full text-white text-sm font-semibold"
-              style={{ width: 36, height: 36, background: "#C60D60" }}
-            >
-              {session?.user?.name?.[0] || "?"}
+            <>
+              <div className="flex items-center" style={{ lineHeight: 1 }}>
+                <span className="font-display" style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-0.015em", color: "var(--fg)" }}>Fraggell</span>
+                <span className="font-display" style={{ fontSize: 17, fontWeight: 600, color: "#C60D60" }}>.</span>
+                <span className="font-display" style={{ fontSize: 17, fontWeight: 500, letterSpacing: "-0.015em", color: "var(--muted)" }}>footage</span>
+              </div>
+              <button onClick={onToggle} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", padding: 2, display: "flex", alignItems: "center", borderRadius: 6, transition: "color 0.14s" }} title="Collapse sidebar" onMouseEnter={(e) => (e.currentTarget.style.color = "var(--fg)")} onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}>
+                <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Find a clip by its shareable code */}
+        {!collapsed && (
+          <div className="px-3 py-3" style={{ borderBottom: "1px solid var(--sidebar-border)" }}>
+            <form onSubmit={handleLookup}>
+              <div className="relative">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "var(--muted)" }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={codeInput}
+                  onChange={(e) => { setCodeInput(e.target.value.toUpperCase()); if (lookupError) setLookupError(null); }}
+                  placeholder="Find clip by code"
+                  maxLength={12}
+                  disabled={looking}
+                  aria-label="Find a clip by its code"
+                  className="w-full rounded-md pl-8 pr-3 py-1.5 text-sm transition-colors focus:outline-none disabled:opacity-50"
+                  style={{ background: "var(--sidebar-hover)", border: "1px solid var(--sidebar-border)", color: "var(--fg)", fontFamily: "var(--font-geist-mono), 'Geist Mono', monospace" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "#C60D60"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--sidebar-border)"; }}
+                />
+              </div>
+              {lookupError && (
+                <p className="mt-1.5 text-[11px] leading-snug" style={{ color: "#E0566F" }}>{lookupError}</p>
+              )}
+            </form>
+          </div>
+        )}
+
+        <nav className="flex-1 overflow-y-auto" style={{ padding: collapsed ? "8px 4px" : "8px" }}>
+          {/* Hub back link */}
+          <a href="https://hub.fraggell.com" data-active="false" style={rowStyle(false, collapsed)} title={collapsed ? "Fraggell Hub" : undefined} {...rowHover}>
+            <span style={{ color: "var(--muted)", display: "flex" }}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+            </span>
+            {!collapsed && "Fraggell Hub"}
+          </a>
+          <div style={{ height: 1, background: "var(--sidebar-border)", margin: "4px 0" }} />
+
+          {navItems.map(navRow)}
+
+          {isAdmin && (
+            <>
+              {!collapsed ? (
+                <p style={{ ...monoStyle, paddingTop: "1.25rem", paddingBottom: "0.5rem", paddingLeft: "0.75rem" }}>Admin</p>
+              ) : (
+                <div style={{ height: 12 }} />
+              )}
+              {adminItems.map(navRow)}
+              <button onClick={handleSync} disabled={syncing} data-active="false" style={{ ...rowStyle(false, collapsed), color: "var(--quiet)", border: "none", cursor: "pointer", opacity: syncing ? 0.5 : 1 }} title={collapsed ? "Sync Drive" : undefined} {...rowHover}>
+                <span style={{ color: "var(--muted)", display: "flex" }}>
+                  <svg className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </span>
+                {!collapsed && (syncing ? "Syncing..." : "Sync Drive")}
+              </button>
+              {!collapsed && syncResult && (
+                <div className="mx-1 mt-1 rounded-lg px-2.5 py-1.5 text-xs leading-snug" style={{ background: "var(--sidebar-hover)", color: syncResult === "Sync failed" ? "#E0566F" : "var(--pink)" }}>
+                  {syncResult}
+                </div>
+              )}
+            </>
+          )}
+        </nav>
+
+        {/* User card */}
+        <div style={{ borderTop: "1px solid var(--sidebar-border)" }}>
+          {collapsed ? (
+            <div style={{ padding: 8, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              {session?.user?.image ? (
+                <img src={session.user.image} alt={session.user.name || ""} title={session.user.name || ""} className="rounded-full object-cover" style={{ width: 32, height: 32 }} />
+              ) : (
+                <div className="flex items-center justify-center rounded-full text-white text-sm font-semibold" style={{ width: 32, height: 32, background: "#C60D60" }} title={session?.user?.name || ""}>{session?.user?.name?.[0] || "?"}</div>
+              )}
+              <ThemeToggle />
+            </div>
+          ) : (
+            <div className="p-3">
+              <div className="flex items-center gap-3 px-2 py-1.5">
+                {session?.user?.image ? (
+                  <img src={session.user.image} alt={session.user.name || ""} className="flex-shrink-0 rounded-full object-cover" style={{ width: 36, height: 36 }} />
+                ) : (
+                  <div className="flex-shrink-0 flex items-center justify-center rounded-full text-white text-sm font-semibold" style={{ width: 36, height: 36, background: "#C60D60" }}>{session?.user?.name?.[0] || "?"}</div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: "var(--fg)" }}>{session?.user?.name}</p>
+                  <p className="truncate" style={{ ...monoStyle, textTransform: "none", letterSpacing: "normal" }}>{session?.user?.role}</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <ThemeToggle />
+                  <button onClick={() => signOut()} className="flex items-center justify-center rounded transition-colors" aria-label="Sign out" style={{ color: "var(--muted)", padding: "0.25rem" }} onMouseEnter={(e) => { e.currentTarget.style.color = "#C60D60"; }} onMouseLeave={(e) => { e.currentTarget.style.color = "var(--muted)"; }}>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate" style={{ color: "#F5F5F5" }}>
-              {session?.user?.name}
-            </p>
-            <p style={monoStyle}>{session?.user?.role}</p>
-          </div>
-          <div className="flex items-center gap-1">
-            <ThemeToggle />
-            <button
-              onClick={() => signOut()}
-              className="flex items-center justify-center rounded transition-colors"
-              aria-label="Sign out"
-              style={{ color: "#6F6F6F", padding: "0.25rem" }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "#C60D60"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "#6F6F6F"; }}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
-          </div>
         </div>
-      </div>
+      </aside>
 
       {lookedUpClip && (
-        <ClipDetailModal
-          clip={lookedUpClip}
-          onClose={() => setLookedUpClip(null)}
-        />
+        <ClipDetailModal clip={lookedUpClip} onClose={() => setLookedUpClip(null)} />
       )}
-    </aside>
+    </>
   );
 }
