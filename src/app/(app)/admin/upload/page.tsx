@@ -191,7 +191,7 @@ export default function UploadPage() {
         <select
           value={selectedClientId}
           onChange={(e) => setSelectedClientId(e.target.value)}
-          className="bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent w-full max-w-sm appearance-none"
+          className="bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-fg focus:outline-none focus:border-accent w-full max-w-sm appearance-none"
         >
           <option value="" disabled>
             Select a client...
