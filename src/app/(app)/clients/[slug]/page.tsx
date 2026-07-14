@@ -698,8 +698,13 @@ export default function ClientDetailPage() {
 
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: "var(--color-fg)" }}>{client.name}</h1>
-            <p className="text-muted text-sm mt-1">
+            <h1
+              className="font-display"
+              style={{ fontWeight: 800, fontSize: "clamp(24px, 3vw, 38px)", letterSpacing: "-0.025em", lineHeight: 1, color: "var(--color-fg)" }}
+            >
+              {client.name}
+            </h1>
+            <p className="text-muted text-sm mt-2">
               {clips.length} clip{clips.length !== 1 ? "s" : ""}
               {client.totalStorageBytes > 0 && (
                 <span className="ml-2">

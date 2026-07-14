@@ -312,44 +312,53 @@ export default function ClipCard({ clip, onSelect, isSelected, onToggleSelect, b
         </div>
       </div>
 
-      {/* Clip name + metadata pills */}
-      <div className="px-3 py-2.5 space-y-2">
+      {/* Clip name + compact meta (single muted row — full tags live in the detail view) */}
+      <div className="px-3 py-2.5" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div className="flex items-baseline gap-2">
-          <p className="text-sm text-neutral-300 truncate group-hover:text-white transition-colors flex-1 min-w-0">
+          <p
+            className="text-sm truncate flex-1 min-w-0 transition-colors"
+            style={{ fontFamily: "var(--font-sora), Sora, sans-serif", fontWeight: 600, color: "var(--color-fg)" }}
+          >
             {clip.name || clip.originalFilename}
           </p>
           {clip.code && (
-            <span className="font-mono text-[10px] tracking-wider text-neutral-500 flex-shrink-0">
+            <span className="font-mono text-[10px] tracking-wider flex-shrink-0" style={{ color: "var(--color-muted)" }}>
               {clip.code}
             </span>
           )}
         </div>
 
-        {(clip.shotType || (clip.tags && clip.tags.length > 0) || (clip.productSkus && clip.productSkus.length > 0)) && (
-          <div className="flex flex-wrap gap-1">
-            {clip.shotType && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-700/60 text-neutral-200 border border-neutral-600/50">
-                {clip.shotType}
-              </span>
-            )}
-            {clip.tags?.map((tag) => (
-              <span
-                key={`t-${tag}`}
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent/15 text-accent border border-accent/25"
-              >
-                {tag}
-              </span>
-            ))}
-            {clip.productSkus?.map((sku) => (
-              <span
-                key={`s-${sku}`}
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/25"
-              >
-                {sku}
-              </span>
-            ))}
-          </div>
-        )}
+        {(() => {
+          const chips = [
+            ...(clip.shotType ? [clip.shotType] : []),
+            ...(clip.tags ?? []),
+          ];
+          const shown = chips.slice(0, 3);
+          const extra = chips.length - shown.length + (clip.productSkus?.length ?? 0);
+          if (shown.length === 0 && extra <= 0) return null;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, overflow: "hidden", height: 18 }}>
+              {shown.map((c) => (
+                <span
+                  key={c}
+                  style={{
+                    flexShrink: 0, padding: "2px 7px", borderRadius: 5,
+                    fontSize: 10, fontWeight: 500, whiteSpace: "nowrap",
+                    fontFamily: "var(--font-sora), Sora, sans-serif",
+                    background: "var(--color-surface-hover)", color: "var(--color-muted)",
+                  }}
+                >
+                  {c}
+                </span>
+              ))}
+              {extra > 0 && (
+                <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 500, color: "var(--color-muted)" }}>
+                  +{extra}
+                </span>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
