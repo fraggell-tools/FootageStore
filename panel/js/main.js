@@ -1,13 +1,13 @@
 'use strict';
 
 const API_BASE      = 'https://footagestore.fraggell.com';
-const PANEL_VERSION = '1.8.0';
+const PANEL_VERSION = '1.8.1';
 const PLUGIN_AUTH   = API_BASE;   // auth goes through Cloudflare, works for all editors
 const PROXY_BASE    = API_BASE;   // proxies served via /api/assets/{id}/proxy.mp4
 const PAGE_LIMIT    = 24;
 const PREF_SESSION  = 'fs_session_token';
 const PREF_DRIVE    = 'fraggell_footage_drive_path';
-const SHARED_HINT   = 'fraggell';
+const SHARED_HINT   = 'footage store';  // matches the "Fraggell Footage Store" shared drive only (not "Fraggell Storage"/"Fraggell Editors")
 const SKIP          = ['.Recycle.Bin','$RECYCLE.BIN','.DS_Store','desktop.ini','System Volume Information'];
 const SESSION_COOKIE= '__Secure-authjs.session-token';
 
@@ -364,12 +364,17 @@ function autoDetectDrive(){
     for(var d=0;d<mounts[m].drives.length;d++){
       if(mounts[m].drives[d].name.toLowerCase().includes(SHARED_HINT)){
         var root=mounts[m].drives[d].fullPath;
-        // Check for a "Footage Storage" subfolder — FootageStore syncs from there
-        var subfolderCandidates=['Footage Storage','footage storage','footage','Footage'];
-        for(var s=0;s<subfolderCandidates.length;s++){
-          var candidate=nodePath.join(root,subfolderCandidates[s]);
-          try{ if(fs.statSync(candidate).isDirectory()) return candidate; }catch(e){}
-        }
+        // Find the "Footage Storage" subfolder — FootageStore syncs from there.
+        // Accept a numbered suffix ("Footage Storage 2", "Footage Storage 3", …) and
+        // prefer the highest-numbered, since the live folder can be rolled over.
+        try{
+          var fsKids=fs.readdirSync(root).filter(function(n){return /^footage storage/i.test(n);})
+            .sort(function(a,b){return b.localeCompare(a,undefined,{numeric:true});});
+          for(var s=0;s<fsKids.length;s++){
+            var candidate=nodePath.join(root,fsKids[s]);
+            try{ if(fs.statSync(candidate).isDirectory()) return candidate; }catch(e){}
+          }
+        }catch(e){}
         return root; // Fallback to drive root if no subfolder found
       }
     }

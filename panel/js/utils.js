@@ -100,11 +100,16 @@ function resolveClipPath(footageRoot, clientName, clip, fsModule, pathModule){
  * @returns {string}            - subfolder path if found, else root unchanged
  */
 function resolveFootageRoot(root, fsModule, pathModule){
-  var candidates = ['Footage Storage','footage storage','footage','Footage'];
-  for(var i=0; i<candidates.length; i++){
-    var candidate = pathModule.join(root, candidates[i]);
-    try{ if(fsModule.statSync(candidate).isDirectory()) return candidate; }catch(e){}
-  }
+  // Accept "Footage Storage" and numbered variants ("Footage Storage 2", …),
+  // preferring the highest-numbered. Falls back to root if none found.
+  try{
+    var kids = fsModule.readdirSync(root).filter(function(n){return /^footage storage/i.test(n);})
+      .sort(function(a,b){return b.localeCompare(a,undefined,{numeric:true});});
+    for(var i=0; i<kids.length; i++){
+      var candidate = pathModule.join(root, kids[i]);
+      try{ if(fsModule.statSync(candidate).isDirectory()) return candidate; }catch(e){}
+    }
+  }catch(e){}
   return root;
 }
 

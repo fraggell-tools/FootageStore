@@ -1,1 +1,1 @@
-{"version":"1.8.0","notes":"Month/angle labels + filters, bulk download to local folder, fixed proxy preview, security hardening"}
+{"version":"1.8.1","notes":"Drive auto-detect now finds numbered 'Footage Storage N' folders (prefers the newest) and matches the Footage Store shared drive more precisely."}
