@@ -19,7 +19,8 @@ export interface Clip {
   originalFilename: string;
   uploadedAt?: string;
   createdAt?: string;
-  hasThumbnail: boolean;
+  hasThumbnail?: boolean;
+  thumbnailPath?: string | null;
   hasSpriteSheet: boolean;
   shotType?: string | null;
   month?: string | null;
@@ -263,7 +264,10 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
     }
   };
 
-  const thumbnailUrl = clip.hasThumbnail
+  // Derive from thumbnailPath too — the clips list API returns thumbnailPath,
+  // not a hasThumbnail flag (matches how ClipCard resolves it), otherwise the
+  // poster is never set and the media area is black before the video paints.
+  const thumbnailUrl = clip.hasThumbnail || clip.thumbnailPath
     ? `/api/assets/${clip.id}/thumbnail.jpg`
     : undefined;
 
