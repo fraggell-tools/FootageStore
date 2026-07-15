@@ -312,7 +312,8 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
                   ref={videoRef}
                   src={`/api/clips/${clip.id}/proxy`}
                   poster={thumbnailUrl}
-                  className="max-w-full max-h-[70vh] object-contain"
+                  className="w-full object-contain"
+                  style={{ height: "70vh" }}
                   preload="metadata"
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
