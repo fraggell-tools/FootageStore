@@ -1,7 +1,7 @@
 'use strict';
 
 const API_BASE      = 'https://footagestore.fraggell.com';
-const PANEL_VERSION = '1.8.1';
+const PANEL_VERSION = '1.8.2';
 const PLUGIN_AUTH   = API_BASE;   // auth goes through Cloudflare, works for all editors
 const PROXY_BASE    = API_BASE;   // proxies served via /api/assets/{id}/proxy.mp4
 const PAGE_LIMIT    = 24;
@@ -29,6 +29,7 @@ const fs       = window.cep_node ? window.cep_node.require('fs')    : null;
 const nodePath = window.cep_node ? window.cep_node.require('path')  : null;
 const nodeHttps= window.cep_node ? window.cep_node.require('https') : null;
 const nodeHttp = window.cep_node ? window.cep_node.require('http')  : null;
+const nodeOs   = window.cep_node ? window.cep_node.require('os')    : null;
 
 // ── Logger — writes to getDataDir()/panel.log (platform.js provides getDataDir) ──
 var _logPath = null;
@@ -460,6 +461,61 @@ var _dragState = {
   threshold: 6  // pixels of movement before drag begins
 };
 
+// ── Persistent thumbnail disk cache ───────────────────────────────────────────
+// Thumbnails are immutable (write-once per clip id), but CEP requests go through
+// Node's https which ignores the browser HTTP cache, so without this the panel
+// re-downloads every thumbnail each time it opens. Cache them to disk (LRU,
+// capped at 100MB) so re-opens are fast. All ops are best-effort — a disk error
+// never breaks thumbnail loading.
+var THUMB_DISK_CACHE_MAX = 100 * 1024 * 1024; // 100MB (~350 thumbnails)
+var _thumbCacheDir = null;   // null = not yet resolved, '' = unavailable
+var _thumbWrites   = 0;
+function thumbCacheDir(){
+  if(_thumbCacheDir !== null) return _thumbCacheDir;
+  _thumbCacheDir = '';
+  try{
+    if(fs && nodePath && nodeOs){
+      var dir = nodePath.join(nodeOs.homedir(), '.fraggell-panel', 'thumbs');
+      fs.mkdirSync(dir, { recursive:true });
+      _thumbCacheDir = dir;
+    }
+  }catch(e){}
+  return _thumbCacheDir;
+}
+function readDiskThumb(clipId){
+  try{
+    var dir = thumbCacheDir(); if(!dir) return null;
+    var f = nodePath.join(dir, clipId + '.jpg');
+    var buf = fs.readFileSync(f);                 // throws if missing
+    try{ var now = new Date(); fs.utimesSync(f, now, now); }catch(e){} // touch → LRU
+    return 'data:image/jpeg;base64,' + buf.toString('base64');
+  }catch(e){ return null; }
+}
+function writeDiskThumb(clipId, buf){
+  try{
+    var dir = thumbCacheDir(); if(!dir || !buf) return;
+    fs.writeFileSync(nodePath.join(dir, clipId + '.jpg'), buf);
+    if(++_thumbWrites % 25 === 0) enforceThumbCacheCap(); // amortise the scan
+  }catch(e){}
+}
+/** Evict least-recently-used thumbnails until under the cap (with hysteresis). */
+function enforceThumbCacheCap(){
+  try{
+    var dir = thumbCacheDir(); if(!dir) return;
+    var files = fs.readdirSync(dir).filter(function(n){ return /\.jpg$/i.test(n); }).map(function(n){
+      var p = nodePath.join(dir, n); var st = fs.statSync(p);
+      return { p:p, size:st.size, mtime:st.mtimeMs };
+    });
+    var total = files.reduce(function(s,f){ return s + f.size; }, 0);
+    if(total <= THUMB_DISK_CACHE_MAX) return;
+    files.sort(function(a,b){ return a.mtime - b.mtime; }); // oldest first
+    var target = THUMB_DISK_CACHE_MAX * 0.9;                // evict down to 90%
+    for(var i=0; i<files.length && total>target; i++){
+      try{ fs.unlinkSync(files[i].p); total -= files[i].size; }catch(e){}
+    }
+  }catch(e){}
+}
+
 /** Queue a thumbnail load for a clip. Uses cached value if available. */
 function loadThumb(clipId){
   if(state.thumbCache.has(clipId)){ applyThumb(clipId,state.thumbCache.get(clipId)); return; }
@@ -478,11 +534,15 @@ function drainThumbQueue(){
   while(thumbActive<THUMB_CONCURRENCY&&thumbQueue.length){
     var clipId=thumbQueue.shift();
     if(state.thumbCache.has(clipId)){ applyThumb(clipId,state.thumbCache.get(clipId)); continue; }
+    // Disk cache hit — serve locally, no network slot needed.
+    var diskUrl=readDiskThumb(clipId);
+    if(diskUrl){ state.thumbCache.set(clipId,diskUrl); applyThumb(clipId,diskUrl); continue; }
     thumbActive++;
     (function(id){
       doReq('/api/assets/'+id+'/thumbnail.jpg',{method:'GET',headers:{'Accept':'image/jpeg,image/*'}})
         .then(function(r){return r.ok?r.buffer():Promise.resolve(null);})
         .then(function(buf){
+          if(buf) writeDiskThumb(id,buf);   // persist the raw JPEG for next time
           var url=buf?'data:image/jpeg;base64,'+buf.toString('base64'):null;
           state.thumbCache.set(id,url); applyThumb(id,url);
         })
@@ -581,6 +641,7 @@ async function init(){
   if(savedPass){  var p=document.getElementById('login-password'); if(p) p.value=savedPass; }
   if(savedEmail&&savedPass){ var r=document.getElementById('remember-me'); if(r) r.checked=true; }
   applyPremiereTheme();
+  try{ enforceThumbCacheCap(); }catch(e){} // trim the thumbnail disk cache on startup
   initLog(); showScreen('connecting'); document.getElementById('connecting-msg').textContent='Checking session...';
   var ok=false; try{ok=await checkExistingSession();}catch(err){log('error','checkExistingSession threw',err);}
   if(!ok){showScreen('login');return;}
