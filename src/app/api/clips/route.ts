@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clips } from "@/lib/db/schema";
-import { eq, ilike, sql, desc, count, and, or } from "drizzle-orm";
+import { eq, ilike, sql, desc, count, and, or, getTableColumns } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -44,8 +44,14 @@ export async function GET(request: NextRequest) {
     .from(clips)
     .where(where);
 
+  // Exclude the heavy `transcript` column from the list payload. It's only shown
+  // in the detail modal (which re-fetches the full clip by id) and isn't used by
+  // the grid, filters or search — shipping it for every clip (1000s per client,
+  // multi-KB each) bloated these paginated responses. Everything else is kept.
+  const { transcript: _transcript, ...listColumns } = getTableColumns(clips);
+
   const results = await db
-    .select()
+    .select(listColumns)
     .from(clips)
     .where(where)
     .orderBy(desc(clips.createdAt))
