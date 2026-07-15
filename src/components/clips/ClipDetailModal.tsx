@@ -310,7 +310,7 @@ export default function ClipDetailModal({ clip, onClose, onDelete, onUpdate, col
               >
                 <video
                   ref={videoRef}
-                  src={`/api/clips/${clip.id}/download`}
+                  src={`/api/clips/${clip.id}/proxy`}
                   poster={thumbnailUrl}
                   className="max-w-full max-h-[70vh] object-contain"
                   preload="metadata"

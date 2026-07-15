@@ -85,7 +85,9 @@ export async function GET(
     headers: {
       "Content-Type": contentType,
       "Content-Length": String(data.length),
-      "Cache-Control": "public, max-age=86400",
+      // Assets are keyed by immutable clip id — the bytes never change, so cache
+      // hard (a year) and skip revalidation entirely.
+      "Cache-Control": "public, max-age=31536000, immutable",
     },
   });
 }
