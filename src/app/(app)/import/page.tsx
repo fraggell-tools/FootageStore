@@ -55,7 +55,7 @@ function newNode(f: BrowseFolder): TreeNode {
   return { ...f, loaded: false, expanded: false, loadError: false, folders: [], files: [] };
 }
 
-async function browse(body: { link?: string; folderId?: string }) {
+async function browse(body: { link?: string; folderId?: string; path?: string }) {
   const res = await fetch("/api/import/browse", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -63,7 +63,13 @@ async function browse(body: { link?: string; folderId?: string }) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.message || data.error || "Browse failed");
-  return data as { folder: BrowseFolder; folders: BrowseFolder[]; files: BrowseFile[] };
+  return data as {
+    folder: BrowseFolder;
+    folders: BrowseFolder[];
+    files: BrowseFile[];
+    source?: "drive" | "dropbox";
+    link?: string;
+  };
 }
 
 /* ── Icons ──────────────────────────────────────────────────── */
@@ -157,6 +163,8 @@ export default function ImportPage() {
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [root, setRoot] = useState<TreeNode | null>(null);
+  const [source, setSource] = useState<"drive" | "dropbox">("drive");
+  const activeLink = useRef("");
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [clients, setClients] = useState<ClientOption[]>([]);
@@ -188,6 +196,8 @@ export default function ImportPage() {
     setImportStatus(null);
     try {
       const data = await browse({ link: link.trim() });
+      setSource(data.source ?? "drive");
+      activeLink.current = data.link ?? link.trim();
       setRoot({
         ...newNode(data.folder),
         loaded: true,
@@ -206,7 +216,11 @@ export default function ImportPage() {
     if (!node.loaded) {
       setLoadingIds((s) => new Set(s).add(node.id));
       try {
-        const data = await browse({ folderId: node.id });
+        const data = await browse(
+          source === "dropbox"
+            ? { link: activeLink.current, path: node.id }
+            : { folderId: node.id }
+        );
         node.folders = data.folders.map(newNode);
         node.files = data.files;
         node.loaded = true;
@@ -311,9 +325,10 @@ export default function ImportPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId,
-          sourceFolderId: root.id,
+          sourceFolderId: source === "dropbox" ? activeLink.current : root.id,
           sourceFolderName: root.name,
           selection,
+          source,
         }),
       });
       const data = await res.json();
@@ -405,10 +420,11 @@ export default function ImportPage() {
   return (
     <div className="p-8 max-w-4xl">
       <div className="mb-8">
-        <h1 className="font-display text-2xl font-semibold text-fg">Import from Drive</h1>
+        <h1 className="font-display text-2xl font-semibold text-fg">Import footage</h1>
         <p className="text-sm text-muted mt-1.5 max-w-xl">
-          Paste a link to a Google Drive folder that&apos;s been shared with us, choose what to bring
-          in, and it&apos;s copied into a client folder — then picked up by the library automatically.
+          Paste a link to a Google Drive or Dropbox folder that&apos;s been shared with us, choose what
+          to bring in, and it&apos;s copied into a client folder — then picked up by the library
+          automatically.
         </p>
       </div>
 
@@ -421,7 +437,7 @@ export default function ImportPage() {
           type="text"
           value={link}
           onChange={(e) => setLink(e.target.value)}
-          placeholder="https://drive.google.com/drive/folders/…"
+          placeholder="https://drive.google.com/… or https://www.dropbox.com/scl/fo/…"
           className="flex-1 bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-fg placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors"
           style={mono}
         />

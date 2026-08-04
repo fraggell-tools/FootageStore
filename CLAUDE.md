@@ -97,6 +97,7 @@ Lives at `/mnt/user/appdata/footagestore/app/.env` (or passed via compose enviro
 - `NEXTAUTH_URL` — public URL
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` — Google Drive OAuth
 - `GOOGLE_DRIVE_PARENT_FOLDER_ID` — where to scan for new media
+- `DROPBOX_APP_KEY` / `DROPBOX_APP_SECRET` / `DROPBOX_REFRESH_TOKEN` — Dropbox shared-link import (app + worker). If unset, Dropbox links are rejected at browse time with a clear message; Drive import is unaffected. Setup: `docs/dropbox-setup.md`.
 - `DATABASE_URL=postgresql://footagestore:footagestore@db:5432/footagestore` (container-internal DNS)
 - `REDIS_URL=redis://redis:6379`
 
@@ -118,7 +119,7 @@ Lives at `/mnt/user/appdata/footagestore/app/.env` (or passed via compose enviro
 - `worker/processors/` — individual BullMQ job handlers
 - `worker/syncDrive.ts` — Google Drive sync logic
 - `worker/reanalyze.ts` — re-run AI analysis on existing media
-- `src/app/(app)/admin/import/` + `worker/processors/importDrive.ts` — Drive import tool (copy footage from external shared folders into a client folder)
+- `src/app/(app)/import/` + `worker/processors/importDrive.ts` / `importDropbox.ts` — import tool (copy footage from external Drive folders or Dropbox shared links into a client folder; shared helpers in `importShared.ts`)
 - `Dockerfile` / `Dockerfile.worker` — build configs
 - `docker-compose.yml` — service topology (app + worker + db + redis)
 - `deploy-webhook/` — subsystem that receives GH webhooks to trigger deploys (separate service)

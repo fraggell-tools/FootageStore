@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { createRedisConnection } from "../src/lib/redis";
 import { processClip } from "./processors/processClip";
 import { importDrive } from "./processors/importDrive";
+import { importDropbox } from "./processors/importDropbox";
 import { HEALTH_KEYS, WORKER_HEARTBEAT_INTERVAL_MS } from "../src/lib/health";
 
 console.log("[Worker] Starting clip-processing worker...");
@@ -28,6 +29,10 @@ const worker = new Worker(
       console.log(`[Worker] Job ${job.id} started — import: ${job.data.importId}`);
       await importDrive(job.data);
       console.log(`[Worker] Job ${job.id} completed — import: ${job.data.importId}`);
+    } else if (job.name === "import-dropbox") {
+      console.log(`[Worker] Job ${job.id} started — dropbox import: ${job.data.importId}`);
+      await importDropbox(job.data);
+      console.log(`[Worker] Job ${job.id} completed — dropbox import: ${job.data.importId}`);
     } else {
       console.log(`[Worker] Job ${job.id} started — clipId: ${job.data.clipId}`);
       await processClip(job.data);

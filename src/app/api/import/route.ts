@@ -10,12 +10,14 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { clientId, sourceFolderId, sourceFolderName, selection } = body as {
+  const { clientId, sourceFolderId, sourceFolderName, selection, source } = body as {
     clientId?: string;
     sourceFolderId?: string;
     sourceFolderName?: string;
     selection?: ImportSelection;
+    source?: "drive" | "dropbox";
   };
+  const importSource: "drive" | "dropbox" = source === "dropbox" ? "dropbox" : "drive";
 
   if (!clientId || !sourceFolderId || !sourceFolderName) {
     return NextResponse.json(
@@ -45,11 +47,16 @@ export async function POST(request: NextRequest) {
       sourceFolderId,
       sourceFolderName,
       selection: { folders: selection!.folders ?? [], files: selection!.files ?? [] },
+      source: importSource,
       createdBy: session.user.id ?? null,
     })
     .returning({ id: imports.id });
 
-  await getClipQueue().add("import-drive", { importId: row.id }, { jobId: row.id });
+  await getClipQueue().add(
+    importSource === "dropbox" ? "import-dropbox" : "import-drive",
+    { importId: row.id },
+    { jobId: row.id }
+  );
 
   return NextResponse.json({ id: row.id }, { status: 201 });
 }
