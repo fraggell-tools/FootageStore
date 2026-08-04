@@ -1,7 +1,7 @@
 'use strict';
 
 const API_BASE      = 'https://footagestore.fraggell.com';
-const PANEL_VERSION = '2.0.0';
+const PANEL_VERSION = '2.0.1';
 const PLUGIN_AUTH   = API_BASE;   // auth goes through Cloudflare, works for all editors
 const PROXY_BASE    = API_BASE;   // proxies served via /api/assets/{id}/proxy.mp4
 const PAGE_LIMIT    = 24;
@@ -920,7 +920,7 @@ function renderClientList(){
     var col=avatarColor(c.name);
     var bkSlug=brandKitSlugFor(c);
     var bkIcon=bkSlug?'<span class="client-bk-btn" title="Open brand kit"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2C6.5 2 2 6 2 11c0 4 3 7 7 7 1 0 1.5-.8 1.5-1.5 0-.5-.3-.9-.3-1.4 0-.7.6-1.3 1.3-1.3H13c3.3 0 6-2.5 6-5.8C19 4.9 15.9 2 12 2z"/></svg></span>':'';
-    btn.innerHTML='<div class="client-avatar" style="background:'+col+'22;color:'+col+'">'+esc(c.name[0].toUpperCase())+'</div><span class="client-name">'+esc(c.name)+'</span><span class="client-count">'+esc(c.clipCount)+'</span>'+bkIcon;
+    btn.innerHTML='<div class="client-avatar" style="background:'+col+'22;color:'+col+'">'+esc(c.name[0].toUpperCase())+'</div><span class="client-name" title="'+esc(c.name)+'">'+esc(c.name)+'</span><span class="client-count">'+esc(c.clipCount)+'</span>'+bkIcon;
     btn.addEventListener('click',function(){selectClient(c);});
     if(bkSlug){
       var bkBtn=btn.querySelector('.client-bk-btn');

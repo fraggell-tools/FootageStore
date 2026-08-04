@@ -23,62 +23,63 @@ if pgrep -x "Adobe Premiere Pro" > /dev/null 2>&1; then
   exit 1
 fi
 
-# ── Authenticate ──────────────────────────────────────────────────────────────
-echo " Sign in with your FootageStore account."
+# ── Authenticate via Fraggell Hub SSO (PKCE code flow) ───────────────────────
+# No panel password: we open the real Hub login in your browser (passkeys/2-step
+# supported), you copy the one-time code it shows, and we exchange it — with a
+# locally-generated verifier the code alone can't be used without — for a session.
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+VERIFIER=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')
+CHALLENGE=$(printf '%s' "$VERIFIER" | openssl dgst -sha256 -binary | b64url)
+STATE=$(openssl rand -hex 16)
+LOGIN_URL="$API/api/auth/panel-login?mode=code&state=$STATE&challenge=$CHALLENGE"
+
+echo " Sign in with your Fraggell Hub account."
+echo " Opening your browser..."
+open "$LOGIN_URL" 2>/dev/null || {
+  echo ""
+  echo " Couldn't open a browser automatically. Open this URL manually:"
+  echo " $LOGIN_URL"
+}
 echo ""
-printf " Email: "
-read EMAIL
-printf " Password: "
-read -s PASSWORD
-echo ""
+echo " After signing in, the page shows a short code. Paste it here:"
+printf " Code: "
+read CODE
+CODE=$(printf '%s' "$CODE" | tr -d '[:space:]')
 echo ""
 
-if [ -z "$EMAIL" ] || [ -z "$PASSWORD" ]; then
-  echo " ✗ Email and password are required."
+if [ -z "$CODE" ]; then
+  echo " ✗ No code entered."
   exit 1
 fi
 
-echo " Authenticating..."
-
-# Use printf to safely build JSON without variable interpolation issues
-JSON=$(printf '{"email":"%s","password":"%s","pluginKey":"fraggell-premiere-plugin-2026"}' "$EMAIL" "$PASSWORD")
-
-AUTH_RESPONSE=$(curl -s -X POST "$API/api/auth/plugin" \
+echo " Verifying..."
+JSON=$(printf '{"code":"%s","verifier":"%s"}' "$CODE" "$VERIFIER")
+EXCHANGE=$(curl -s -X POST "$API/api/auth/panel-exchange" \
   -H "Content-Type: application/json" \
   -d "$JSON")
 
-if [ -z "$AUTH_RESPONSE" ]; then
-  echo " ✗ No response from server. Check your internet connection."
-  exit 1
-fi
-
-# Extract session token using python3 (available on all modern Macs)
-TOKEN=$(echo "$AUTH_RESPONSE" | python3 -c "
+TOKEN=$(echo "$EXCHANGE" | python3 -c "
 import sys, json
 try:
-    d = json.loads(sys.stdin.read())
-    t = d.get('sessionToken', '')
-    print(t)
-except Exception as e:
+    print(json.loads(sys.stdin.read()).get('sessionToken', ''))
+except Exception:
     print('')
 " 2>/dev/null)
 
 if [ -z "$TOKEN" ]; then
-  # Show the actual error from the server
-  ERROR=$(echo "$AUTH_RESPONSE" | python3 -c "
+  ERROR=$(echo "$EXCHANGE" | python3 -c "
 import sys, json
 try:
-    d = json.loads(sys.stdin.read())
-    print(d.get('error', 'Authentication failed'))
+    print(json.loads(sys.stdin.read()).get('error', 'Sign-in failed'))
 except:
-    print('Authentication failed — unexpected server response')
+    print('Sign-in failed — the code may have expired (2 min). Run the installer again.')
 " 2>/dev/null)
   echo " ✗ $ERROR"
   echo ""
   exit 1
 fi
 
-echo " ✓ Signed in as $EMAIL"
+echo " ✓ Signed in"
 echo ""
 
 # ── Enable unsigned CEP extensions ───────────────────────────────────────────
