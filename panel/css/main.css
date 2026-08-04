@@ -931,6 +931,21 @@ input  { font-family: var(--font); }
 }
 #modal-code-copy-btn:hover { color: var(--text); border-color: var(--accent); }
 
+/* ── Login links (Hub SSO) ───────────────────────────────────────────────── */
+.login-alt { text-align: center; margin-top: 12px; }
+.login-link {
+  font-size: 10.5px; color: var(--text-dim); text-decoration: none;
+  transition: color var(--tr);
+}
+.login-link:hover { color: var(--accent); text-decoration: underline; }
+#code-input-field {
+  width: 100%; box-sizing: border-box; height: 30px; padding: 0 8px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: var(--r); color: var(--text); font-size: 11px; outline: none;
+  font-family: var(--font-mono);
+}
+#code-input-field:focus { border-color: var(--accent); }
+
 /* ── Sidebar collapse ────────────────────────────────────────────────── */
 #sidebar-toggle { margin-right: 2px; }
 #sidebar-toggle.active { color: var(--accent); }

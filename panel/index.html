@@ -13,21 +13,33 @@
     <div class="connect-card">
       <div class="logo-mark logo-mark--lg">F</div>
       <h1 class="connect-title">FootageStore</h1>
-      <p class="connect-sub">Sign in with your FootageStore account</p>
-      <div class="login-form">
-        <div class="form-field">
-          <label>Email</label>
-          <input type="email" id="login-email" placeholder="you@fraggellproductions.com" autocomplete="email" />
+      <p class="connect-sub">Sign in with your Fraggell Hub account</p>
+
+      <!-- Hub SSO view -->
+      <div id="hub-login-view" class="login-form">
+        <button class="connect-btn" id="hub-login-btn">Sign in with Fraggell Hub</button>
+        <div id="hub-login-status" style="display:none;text-align:center">
+          <div class="spinner spinner--lg" style="margin:14px auto 10px"></div>
+          <p class="connect-sub" style="margin:0 0 8px">Waiting for you to sign in in your browser…</p>
+          <a href="#" id="hub-login-cancel" class="login-link">Cancel</a>
         </div>
-        <div class="form-field">
-          <label>Password</label>
-          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+        <div id="hub-login-error" class="login-error"></div>
+        <div class="login-alt">
+          <a href="#" id="show-code-link" class="login-link">Trouble signing in? Enter a code manually</a>
         </div>
-        <label class="remember-row">
-          <input type="checkbox" id="remember-me"> Remember me
-        </label>
-        <div id="login-error" class="login-error"></div>
-        <button class="connect-btn" id="login-btn">Sign in</button>
+      </div>
+
+      <!-- Manual code (loopback-blocked fallback) -->
+      <div id="code-view" class="login-form" style="display:none">
+        <p class="connect-sub" style="margin-top:0">Paste the code shown in your browser after signing in.</p>
+        <div class="form-field">
+          <input type="text" id="code-input-field" placeholder="Paste code" autocomplete="off" spellcheck="false" />
+        </div>
+        <div id="code-error" class="login-error"></div>
+        <button class="connect-btn" id="code-submit">Sign in</button>
+        <div class="login-alt">
+          <a href="#" id="code-back" class="login-link">Back</a>
+        </div>
       </div>
     </div>
   </div>

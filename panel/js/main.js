@@ -1,7 +1,7 @@
 'use strict';
 
 const API_BASE      = 'https://footagestore.fraggell.com';
-const PANEL_VERSION = '1.9.0';
+const PANEL_VERSION = '2.0.0';
 const PLUGIN_AUTH   = API_BASE;   // auth goes through Cloudflare, works for all editors
 const PROXY_BASE    = API_BASE;   // proxies served via /api/assets/{id}/proxy.mp4
 const PAGE_LIMIT    = 24;
@@ -32,6 +32,7 @@ const nodePath = window.cep_node ? window.cep_node.require('path')  : null;
 const nodeHttps= window.cep_node ? window.cep_node.require('https') : null;
 const nodeHttp = window.cep_node ? window.cep_node.require('http')  : null;
 const nodeOs   = window.cep_node ? window.cep_node.require('os')    : null;
+const nodeCrypto = window.cep_node ? window.cep_node.require('crypto') : null;
 
 // ── Logger — writes to getDataDir()/panel.log (platform.js provides getDataDir) ──
 var _logPath = null;
@@ -596,8 +597,155 @@ async function checkExistingSession(){
 }
 /** Clear auth state and return to the login screen. */
 function logout(){
+  cancelHubLogin();
   delPref(PREF_SESSION); state.sessionToken=null; state.clients=[]; state.activeClient=null;
-  state.clips=[]; state.selected.clear(); showScreen('login');
+  state.clips=[]; state.selected.clear(); resetLoginScreen(); showScreen('login');
+}
+
+// ── Hub SSO login (loopback / RFC 8252 native-app flow) ─────────────────────────
+// The panel opens the real Hub login in the system browser (so Logto + passkeys +
+// MFA all apply), then catches the minted session token on a one-shot 127.0.0.1
+// listener. Falls back to a copy-paste code if the local port can't be bound.
+var _hubServer=null, _hubState=null, _hubTimer=null, _hubVerifier=null, _hubChallenge=null;
+
+/** Cryptographically-random state nonce binding a callback to this panel instance. */
+function genNonce(){
+  try{ if(nodeCrypto) return nodeCrypto.randomBytes(18).toString('hex'); }catch(e){}
+  return 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,12);
+}
+/** PKCE verifier (secret) + challenge (base64url sha256) for this sign-in attempt. */
+function newPkce(){
+  var verifier;
+  try{ verifier = nodeCrypto ? nodeCrypto.randomBytes(32).toString('base64url') : (genNonce()+genNonce()); }
+  catch(e){ verifier = genNonce()+genNonce(); }
+  _hubVerifier = verifier;
+  try{ _hubChallenge = nodeCrypto.createHash('sha256').update(verifier).digest('base64url'); }
+  catch(e){ _hubChallenge = verifier; } // fallback: no hashing available (still one-time + TTL bound)
+  return _hubChallenge;
+}
+/** Exchange a one-time code for the session token, then continue into the panel. */
+async function exchangeCode(code, onError){
+  try{
+    var r=await nodeRequest(API_BASE+'/api/auth/panel-exchange',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:code, verifier:_hubVerifier})
+    });
+    var data=await r.json();
+    if(!r.ok||!data.sessionToken) throw new Error(data.error||'Sign-in could not be completed.');
+    completeHubLogin(data.sessionToken);
+  }catch(e){
+    log('warn','exchangeCode failed',e);
+    if(onError) onError(e); else showHubError(e.message||'Sign-in failed.');
+  }
+}
+/** Tear down any in-progress Hub login (server + timeout). */
+function cancelHubLogin(){
+  if(_hubTimer){ clearTimeout(_hubTimer); _hubTimer=null; }
+  if(_hubServer){ try{ _hubServer.close(); }catch(e){} _hubServer=null; }
+}
+/** Start the loopback Hub sign-in: open the browser, wait for the token callback. */
+function hubLogin(){
+  if(!nodeHttp||!getCS){ showHubError('Sign-in unavailable in this environment.'); return; }
+  cancelHubLogin();
+  _hubState=genNonce();
+  var challenge=newPkce();
+  try{
+    _hubServer=nodeHttp.createServer(function(req,res){ handleHubCallback(req,res); });
+    _hubServer.on('error',function(e){ log('warn','Hub loopback bind failed, using code fallback',e); startCodeFallback(); });
+    _hubServer.listen(0,'127.0.0.1',function(){
+      var port=_hubServer.address().port;
+      var url=API_BASE+'/api/auth/panel-login?port='+port+'&state='+encodeURIComponent(_hubState)+'&challenge='+encodeURIComponent(challenge);
+      try{ getCS().openURLInDefaultBrowser(url); }catch(e){ log('warn','openURL failed',e); }
+      showHubWaiting();
+      _hubTimer=setTimeout(function(){ cancelHubLogin(); showHubError('Sign-in timed out. Please try again.'); }, 5*60*1000);
+    });
+  }catch(e){ log('warn','hubLogin threw, using code fallback',e); startCodeFallback(); }
+}
+/** Handle the browser's loopback callback carrying the session token. */
+function handleHubCallback(req,res){
+  try{
+    var u=new URL(req.url,'http://127.0.0.1');
+    var code=u.searchParams.get('code'), st=u.searchParams.get('state');
+    if(!code||st!==_hubState){
+      res.writeHead(400,{'Content-Type':'text/html'});
+      res.end('<!doctype html><meta charset=utf-8><body style="font-family:sans-serif;text-align:center;padding-top:60px"><h3>Invalid sign-in request.</h3><p>Please start again from the panel.</p></body>');
+      return;
+    }
+    res.writeHead(200,{'Content-Type':'text/html'});
+    res.end('<!doctype html><meta charset=utf-8><body style="font-family:-apple-system,Segoe UI,sans-serif;background:#0e0f12;color:#e8e8ea;text-align:center;padding-top:80px"><div style="width:52px;height:52px;border-radius:12px;background:#e84c88;color:#fff;font-weight:800;font-size:24px;display:flex;align-items:center;justify-content:center;margin:0 auto 18px">F</div><h2>&#10003; Signed in</h2><p style="color:#a0a0a8">You can close this tab and return to Premiere.</p></body>');
+    exchangeCode(code); // one-time code → token (PKCE)
+  }catch(e){ try{ res.writeHead(500); res.end('error'); }catch(_){}; log('warn','handleHubCallback failed',e); }
+}
+/** Store the token from a successful Hub sign-in and continue into the panel. */
+function completeHubLogin(token){
+  cancelHubLogin();
+  state.sessionToken=token; setPref(PREF_SESSION,token);
+  showScreen('connecting');
+  var m=document.getElementById('connecting-msg'); if(m) m.textContent='Signing in...';
+  finishLogin();
+}
+/** Fallback when the loopback port can't be bound: open code mode + show paste box. */
+function startCodeFallback(){
+  cancelHubLogin();
+  _hubState=_hubState||genNonce();
+  var challenge=_hubChallenge||newPkce();
+  var url=API_BASE+'/api/auth/panel-login?mode=code&state='+encodeURIComponent(_hubState)+'&challenge='+encodeURIComponent(challenge);
+  try{ getCS().openURLInDefaultBrowser(url); }catch(e){ log('warn','openURL failed',e); }
+  showCodeView();
+}
+/** Exchange a pasted one-time code for the session token and continue. */
+async function submitCode(){
+  var inp=document.getElementById('code-input-field'), err=document.getElementById('code-error');
+  var code=(inp&&inp.value||'').trim();
+  if(!code){ if(err) err.textContent='Paste the code from your browser first.'; return; }
+  if(err) err.textContent='';
+  var btn=document.getElementById('code-submit'); if(btn){ btn.textContent='Signing in...'; btn.disabled=true; }
+  await exchangeCode(code, function(e){
+    if(err) err.textContent=e.message||'That code was not accepted.';
+    if(btn){ btn.textContent='Sign in'; btn.disabled=false; }
+  });
+}
+/** Post-auth: detect the Drive and either open the panel, picker, or error screen. */
+function finishLogin(){
+  var hasDrive=connectDrive();
+  if(!hasDrive){
+    var mounts=findMounts(), all=mounts.reduce(function(a,m){return a.concat(m.drives);},[]);
+    if(all.length>1){ showDrivePicker(all); return; }
+    showNotConnected(mounts.length>0?'Google Drive is running but no Shared Drives are visible.':'Google Drive Desktop does not appear to be running.');
+    return;
+  }
+  startPanel();
+}
+
+// ── Login screen view state ─────────────────────────────────────────────────────
+function _show(id,on){ var el=document.getElementById(id); if(el) el.style.display=on?'':'none'; }
+/** Reset the login card to its initial "Sign in with Hub" state. */
+function resetLoginScreen(){
+  _show('hub-login-view',true); _show('code-view',false);
+  _show('hub-login-status',false);
+  var b=document.getElementById('hub-login-btn'); if(b) b.style.display='';
+  var e=document.getElementById('hub-login-error'); if(e) e.textContent='';
+  var ce=document.getElementById('code-error'); if(ce) ce.textContent='';
+  var ci=document.getElementById('code-input-field'); if(ci) ci.value='';
+}
+/** Show the "waiting for browser sign-in" spinner + cancel. */
+function showHubWaiting(){
+  var b=document.getElementById('hub-login-btn'); if(b) b.style.display='none';
+  var e=document.getElementById('hub-login-error'); if(e) e.textContent='';
+  _show('hub-login-status',true);
+}
+/** Show an error on the Hub login view and restore the sign-in button. */
+function showHubError(msg){
+  cancelHubLogin();
+  _show('hub-login-status',false);
+  var b=document.getElementById('hub-login-btn'); if(b) b.style.display='';
+  var e=document.getElementById('hub-login-error'); if(e) e.textContent=msg||'Sign-in failed.';
+}
+/** Switch to the manual code-paste view. */
+function showCodeView(){
+  _show('hub-login-view',false); _show('code-view',true);
+  var ci=document.getElementById('code-input-field'); if(ci){ ci.value=''; try{ci.focus();}catch(e){} }
 }
 
 // ── Data ──────────────────────────────────────────────────────────────────────
@@ -661,11 +809,6 @@ function showScreen(n){
 }
 /** Initialise the panel on load: restore credentials, check session, detect drive. */
 async function init(){
-  // Pre-fill login credentials if remembered
-  var savedEmail=getPref(PREF_EMAIL), savedPass=getPref(PREF_PASS);
-  if(savedEmail){ var e=document.getElementById('login-email'); if(e) e.value=savedEmail; }
-  if(savedPass){  var p=document.getElementById('login-password'); if(p) p.value=savedPass; }
-  if(savedEmail&&savedPass){ var r=document.getElementById('remember-me'); if(r) r.checked=true; }
   // Restore UI prefs (sidebar collapsed, clip sort order)
   state.sidebarCollapsed = getPref(PREF_SIDEBAR)===true;
   state.sortOrder = getPref(PREF_SORT)==='oldest' ? 'oldest' : 'newest';
@@ -1715,27 +1858,18 @@ function toggleSort(){
  * Wire up the login screen — sign-in button, Enter key on email/password fields.
  */
 function setupLoginEvents(){
-  document.getElementById('login-btn').addEventListener('click',async function(){
-    var email=(document.getElementById('login-email').value||'').trim();
-    var password=document.getElementById('login-password').value||'';
-    var errEl=document.getElementById('login-error'), btn=document.getElementById('login-btn');
-    if(!email||!password){errEl.textContent='Please enter email and password';return;}
-    btn.textContent='Signing in...';btn.disabled=true;errEl.textContent='';
-    try{
-      await login(email,password);
-      var hasDrive=connectDrive();
-      if(!hasDrive){
-        var mounts=findMounts(),all=mounts.reduce(function(a,m){return a.concat(m.drives);},[]);
-        if(all.length>1){showDrivePicker(all);return;}
-        showNotConnected(mounts.length>0?'No Shared Drives visible.':'Google Drive Desktop not running.');
-        return;
-      }
-      await startPanel();
-    }catch(err){errEl.textContent=err.message||'Login failed';}
-    finally{btn.textContent='Sign in';btn.disabled=false;}
-  });
-  document.getElementById('login-password').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('login-btn').click();});
-  document.getElementById('login-email').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('login-password').focus();});
+  var hubBtn=document.getElementById('hub-login-btn');
+  if(hubBtn) hubBtn.addEventListener('click',hubLogin);
+  var cancel=document.getElementById('hub-login-cancel');
+  if(cancel) cancel.addEventListener('click',function(){ cancelHubLogin(); resetLoginScreen(); });
+  var showCode=document.getElementById('show-code-link');
+  if(showCode) showCode.addEventListener('click',function(e){ e.preventDefault(); startCodeFallback(); });
+  var codeSubmit=document.getElementById('code-submit');
+  if(codeSubmit) codeSubmit.addEventListener('click',submitCode);
+  var codeInput=document.getElementById('code-input-field');
+  if(codeInput) codeInput.addEventListener('keydown',function(e){ if(e.key==='Enter') submitCode(); });
+  var codeBack=document.getElementById('code-back');
+  if(codeBack) codeBack.addEventListener('click',function(e){ e.preventDefault(); cancelHubLogin(); resetLoginScreen(); });
 }
 
 /**
