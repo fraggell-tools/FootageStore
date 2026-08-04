@@ -23,7 +23,8 @@ export default async function middleware(req: NextRequest) {
     pathname === "/panel-version.json" ||
     pathname === "/install-panel.sh" ||
     pathname === "/install-panel.bat" ||
-    pathname.match(/\.(svg|png|jpg|ico|js|css|json|sh|bat|zip)$/)
+    pathname === "/install-panel.ps1" ||
+    pathname.match(/\.(svg|png|jpg|ico|js|css|json|sh|bat|ps1|zip)$/)
   ) {
     return NextResponse.next();
   }
