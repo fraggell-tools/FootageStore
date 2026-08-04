@@ -10,13 +10,22 @@ import { clients, imports, type ImportError } from "../../src/lib/db/schema";
 import { uploadFileToDrive } from "../../src/lib/gdrive";
 import {
   isDropboxConfigured,
+  getSharedLinkMeta,
   listSharedLinkFolder,
   downloadSharedLinkFile,
   withDropboxRetry,
+  isRetryableDropboxError,
   DropboxApiError,
 } from "../../src/lib/dropbox";
-import { buildCopyPlan } from "./importPlan";
+import { isRetryableDriveError } from "./driveRetry";
+import { buildCopyPlan, type CopyPlanEntry } from "./importPlan";
 import { ensureFolderPath, getExistingNames } from "./importShared";
+
+/** Retryable during the download+upload transfer loop: either a transient
+ * Dropbox error on the download, or a transient Drive error on the upload. */
+function isRetryableTransferError(err: unknown): boolean {
+  return isRetryableDropboxError(err) || isRetryableDriveError(err);
+}
 
 function friendlyDropboxMessage(err: unknown): string {
   if (err instanceof DropboxApiError) {
@@ -69,9 +78,27 @@ export async function importDropbox(data: { importId: string }): Promise<void> {
 
   try {
     console.log(`[Import] ${importId}: expanding Dropbox selection from "${imp.sourceFolderName}"...`);
-    const plan = await buildCopyPlan(imp.selection, (path) =>
-      withDropboxRetry(() => listSharedLinkFolder(link, path))
-    );
+
+    // Single-file (/scl/fi/) links collapse to id "" for BOTH the browse
+    // root node and the lone file within it, because the shared-link tree
+    // has no folder to distinguish them. The page's collectSelection walks
+    // top-down and checks the root first, so a single-file selection always
+    // comes back as folders:[{id:""}], never files:[{id:""}]. Feeding that
+    // into buildCopyPlan would call listSharedLinkFolder(link, "") — i.e.
+    // files/list_folder — on a link that Dropbox considers a file, which
+    // 409s. Detect that case up front via the link's own metadata and build
+    // a single-entry plan instead of going through buildCopyPlan.
+    let plan: CopyPlanEntry[];
+    const meta = await withDropboxRetry(() => getSharedLinkMeta(link));
+    if (!meta.isFolder) {
+      // downloadSharedLinkFile omits the `path` arg entirely for file links
+      // when passed "", which is exactly what this needs.
+      plan = [{ sourceFileId: "", fileName: meta.name, relativePath: [] }];
+    } else {
+      plan = await buildCopyPlan(imp.selection, (path) =>
+        withDropboxRetry(() => listSharedLinkFolder(link, path))
+      );
+    }
 
     await db
       .update(imports)
@@ -104,11 +131,23 @@ export async function importDropbox(data: { importId: string }): Promise<void> {
           skipped++;
         } else {
           // Retry wraps download+upload together: a retried download needs a
-          // fresh stream, so the upload can't be retried independently.
-          await withDropboxRetry(async () => {
-            const { stream } = await downloadSharedLinkFile(link, entry.sourceFileId);
-            await uploadFileToDrive(destFolderId, entry.fileName, "application/octet-stream", stream);
-          });
+          // fresh stream, so the upload can't be retried independently. The
+          // predicate covers both APIs since a transient Drive 429/5xx from
+          // uploadFileToDrive must also be retried, not just Dropbox errors.
+          await withDropboxRetry(
+            async () => {
+              const { stream } = await downloadSharedLinkFile(link, entry.sourceFileId);
+              try {
+                await uploadFileToDrive(destFolderId, entry.fileName, "application/octet-stream", stream);
+              } finally {
+                // Always release the download stream (socket + buffers),
+                // whether the upload succeeded or threw — otherwise a failed
+                // upload leaks it for the life of this long-running worker.
+                stream.destroy();
+              }
+            },
+            { isRetryable: isRetryableTransferError }
+          );
           existing.add(entry.fileName);
           copied++;
         }

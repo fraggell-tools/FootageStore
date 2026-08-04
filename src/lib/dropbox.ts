@@ -81,16 +81,24 @@ export function isRetryableDropboxError(err: unknown): boolean {
 
 export async function withDropboxRetry<T>(
   fn: () => Promise<T>,
-  opts: { retries?: number; baseDelayMs?: number; sleep?: (ms: number) => Promise<void> } = {}
+  opts: {
+    retries?: number;
+    baseDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    /** Override which errors are retried. Defaults to Dropbox 429/5xx only —
+     * pass this to also retry errors from a non-Dropbox call made inside `fn`
+     * (e.g. a Drive upload interleaved with a Dropbox download). */
+    isRetryable?: (err: unknown) => boolean;
+  } = {}
 ): Promise<T> {
-  const { retries = 5, baseDelayMs = 2000, sleep = defaultSleep } = opts;
+  const { retries = 5, baseDelayMs = 2000, sleep = defaultSleep, isRetryable = isRetryableDropboxError } = opts;
   let attempt = 0;
   for (;;) {
     try {
       return await fn();
     } catch (err) {
-      if (!isRetryableDropboxError(err) || attempt >= retries) throw err;
-      const retryAfterMs = (err as DropboxApiError).retryAfterSec * 1000;
+      if (!isRetryable(err) || attempt >= retries) throw err;
+      const retryAfterMs = err instanceof DropboxApiError ? err.retryAfterSec * 1000 : 0;
       const backoff = baseDelayMs * 2 ** attempt + Math.random() * 1000;
       await sleep(Math.max(retryAfterMs, backoff));
       attempt++;

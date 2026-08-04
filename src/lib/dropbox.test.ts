@@ -67,6 +67,40 @@ describe("withDropboxRetry", () => {
       )
     ).rejects.toThrow();
   });
+
+  it("retries non-Dropbox errors when a custom isRetryable predicate says so", async () => {
+    class FakeDriveError extends Error {
+      code = 429;
+    }
+    let calls = 0;
+    const result = await withDropboxRetry(
+      async () => {
+        calls++;
+        if (calls < 3) throw new FakeDriveError("rate limited");
+        return "ok";
+      },
+      {
+        sleep: noSleep,
+        isRetryable: (err) => err instanceof FakeDriveError && err.code === 429,
+      }
+    );
+    expect(result).toBe("ok");
+    expect(calls).toBe(3);
+  });
+
+  it("custom isRetryable predicate does not retry errors it rejects", async () => {
+    let calls = 0;
+    await expect(
+      withDropboxRetry(
+        async () => {
+          calls++;
+          throw new Error("not retryable");
+        },
+        { sleep: noSleep, isRetryable: () => false }
+      )
+    ).rejects.toThrow("not retryable");
+    expect(calls).toBe(1);
+  });
 });
 
 describe("listSharedLinkFolder", () => {
