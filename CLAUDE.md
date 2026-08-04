@@ -125,10 +125,11 @@ Lives at `/mnt/user/appdata/footagestore/app/.env` (or passed via compose enviro
 - `drizzle.config.ts` — Drizzle kit config
 
 ## Premiere Pro CEP Panel
-- **The panel's source code is NOT in this repo.** The app only serves a pre-built zip from `/data/panel/panel.zip` on the server.
-- Serving endpoints: `src/app/api/panel/download/` (panel zip) plus the plugin auth route under `src/app/api/auth/`.
-- Version advertised to clients: `public/panel-version.json`.
-- To change panel behaviour: locate the external panel source, rebuild, zip, drop at `/data/panel/panel.zip`, bump `panel-version.json`. Don't spend a session searching this repo for panel UI code, it isn't here.
+- **The panel source lives in this repo under `panel/`** — `index.html`, `js/main.js` (the ~1,900-line panel logic), `css/main.css`, `host/index.jsx` (ExtendScript), installers, and `build-and-deploy.bat`. (It used to be external; that's no longer true.)
+- Serving endpoints: `src/app/api/panel/download/` (serves the built zip) plus the plugin auth route under `src/app/api/auth/`.
+- Version advertised to clients: `public/panel-version.json`. The panel checks this on open and self-updates. `PANEL_VERSION` in `panel/js/main.js` must match.
+- To ship a panel change: edit files under `panel/`, bump `PANEL_VERSION` + `public/panel-version.json`, then either run `panel/build-and-deploy.bat <version>` (Windows: zips `panel/`, SCPs to `/data/panel/panel.zip`, rebuilds app) or, on a normal compose-build deploy, re-zip `panel/` to `/data/panel/panel.zip` on the server so the download endpoint serves the new build.
+- **Brand Kit** (v1.9.0): the panel shows a brand-kit icon on client rows that have a kit, fetched via FootageStore's `src/app/api/brand-kits/` proxy, which forwards to the Hub (`hub.fraggell.com/api/brand-kits`) using `SOP_SERVICE_TOKEN`. That env var must be set on the FootageStore server (same value as the Hub) or no brand-kit buttons appear.
 
 ## Backups
 - Folder: `/mnt/user/backups/footagestore/YYYY-MM-DD-HHMM-<label>/`

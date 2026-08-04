@@ -1,1 +1,1 @@
-{"version":"1.8.2","notes":"Faster re-opens: thumbnails now cached to disk (LRU, 100MB cap). Drive auto-detect finds numbered 'Footage Storage N' folders (prefers the newest)."}
+{"version":"1.9.0","notes":"Brand Kits: open a client's brand kit (copy hex/HSL, fonts, guidelines) without leaving Premiere. Collapse the client list to widen the grid. Sort clips newest or oldest."}

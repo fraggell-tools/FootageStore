@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clips } from "@/lib/db/schema";
-import { eq, ilike, sql, desc, count, and, or, getTableColumns } from "drizzle-orm";
+import { eq, ilike, sql, desc, asc, count, and, or, getTableColumns } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
   const clientId = searchParams.get("clientId");
   const search = searchParams.get("search");
   const shotType = searchParams.get("shotType");
+  // sort=oldest orders by upload date ascending; anything else (default) newest-first.
+  const sort = searchParams.get("sort") === "oldest" ? "oldest" : "newest";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
   const offset = (page - 1) * limit;
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
     .select(listColumns)
     .from(clips)
     .where(where)
-    .orderBy(desc(clips.createdAt))
+    .orderBy(sort === "oldest" ? asc(clips.createdAt) : desc(clips.createdAt))
     .limit(limit)
     .offset(offset);
 

@@ -1,7 +1,7 @@
 'use strict';
 
 const API_BASE      = 'https://footagestore.fraggell.com';
-const PANEL_VERSION = '1.8.2';
+const PANEL_VERSION = '1.9.0';
 const PLUGIN_AUTH   = API_BASE;   // auth goes through Cloudflare, works for all editors
 const PROXY_BASE    = API_BASE;   // proxies served via /api/assets/{id}/proxy.mp4
 const PAGE_LIMIT    = 24;
@@ -14,6 +14,8 @@ const SESSION_COOKIE= '__Secure-authjs.session-token';
 
 const PREF_EMAIL    = 'fraggell_saved_email';
 const PREF_PASS     = 'fraggell_saved_pass';
+const PREF_SIDEBAR  = 'fraggell_sidebar_collapsed';
+const PREF_SORT     = 'fraggell_sort_order';
 
 // Escape untrusted values (clip names, filenames, tags, folder names from the
 // API/Drive) before putting them in innerHTML. In a CEP panel the page has Node
@@ -348,6 +350,7 @@ var state = {
   searchQuery:'', filterShotType:null, filterTags:new Set(), filterSkus:new Set(),
   filterMonths:new Set(), filterAngles:new Set(),
   gridSize:'md', projectName:'No project open',
+  sortOrder:'newest', brandKits:new Map(), bkClient:null,
   vttCache:new Map(), spriteCache:new Map(),
   thumbCache:new Map(),
   pathCache:new Map(),
@@ -600,11 +603,33 @@ function logout(){
 // ── Data ──────────────────────────────────────────────────────────────────────
 /** Fetch all clients from the API and render the sidebar list. */
 async function loadClients(){ var data=await apiJSON('/api/clients'); state.clients=data; renderClientList(); }
+/**
+ * Fetch the list of clients that have a populated brand kit (via the FootageStore
+ * proxy, which holds the Hub service token). Builds a normalized-name → Hub-slug
+ * map so a brand-kit icon shows only for matching clients. Best-effort — a
+ * failure just means no brand-kit buttons appear.
+ */
+async function loadBrandKits(){
+  try{
+    var data=await apiJSON('/api/brand-kits');
+    state.brandKits.clear();
+    // Register each kit under both its plain and "and"-stripped normalized slug
+    // so client names that spell "and" out (or don't) still resolve. Plain form
+    // is set last so an exact match always wins over the looser one.
+    (data.kits||[]).forEach(function(k){
+      if(!k||!k.slug) return;
+      var na=normalizeNameNoAnd(k.slug); if(na && !state.brandKits.has(na)) state.brandKits.set(na, k.slug);
+      state.brandKits.set(normalizeName(k.slug), k.slug);
+    });
+    if(state.clients.length) renderClientList();
+  }catch(err){ log('warn','loadBrandKits failed',err); }
+}
 /** Fetch a page of clips for a client. Appends to state.clips if append=true. */
 async function loadClips(clientId,page,append){
   var params=new URLSearchParams({clientId:clientId,page:page||1,limit:PAGE_LIMIT});
   if(state.searchQuery) params.set('search',state.searchQuery);
   if(state.filterShotType) params.set('shotType',state.filterShotType);
+  if(state.sortOrder==='oldest') params.set('sort','oldest');
   var data=await apiJSON('/api/clips?'+params.toString());
   state.clips=append?state.clips.concat(data.clips):data.clips;
   state.totalClips=data.pagination.total; state.currentPage=data.pagination.page; state.totalPages=data.pagination.totalPages;
@@ -640,6 +665,10 @@ async function init(){
   if(savedEmail){ var e=document.getElementById('login-email'); if(e) e.value=savedEmail; }
   if(savedPass){  var p=document.getElementById('login-password'); if(p) p.value=savedPass; }
   if(savedEmail&&savedPass){ var r=document.getElementById('remember-me'); if(r) r.checked=true; }
+  // Restore UI prefs (sidebar collapsed, clip sort order)
+  state.sidebarCollapsed = getPref(PREF_SIDEBAR)===true;
+  state.sortOrder = getPref(PREF_SORT)==='oldest' ? 'oldest' : 'newest';
+  applySidebarCollapsed(); applySortLabel();
   applyPremiereTheme();
   try{ enforceThumbCacheCap(); }catch(e){} // trim the thumbnail disk cache on startup
   initLog(); showScreen('connecting'); document.getElementById('connecting-msg').textContent='Checking session...';
@@ -659,6 +688,7 @@ async function init(){
 async function startPanel(){
   hideSessionBanner(); initIO(); showScreen('panel');
   try{await loadClients();}catch(err){log('error','loadClients failed',err);showToast('Failed to load clients: '+err.message,'error');}
+  loadBrandKits(); // async, non-blocking — re-renders the client list when it lands
   updateProjectName(); setInterval(updateProjectName,5000);
   checkForUpdate();
   // Poll Premiere's theme every 1s and re-apply only if it changed.
@@ -700,6 +730,24 @@ function showDrivePicker(drives){
 
 // ── Client list ───────────────────────────────────────────────────────────────
 var AVATAR_COLORS=['#6366f1','#8b5cf6','#ec4899','#14b8a6','#f59e0b','#3b82f6','#10b981','#f43f5e'];
+/** Normalise a client name or slug for tolerant matching ("Nathan & Sons" == "nathan-and-sons"). */
+function normalizeName(s){ return String(s==null?'':s).toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]/g,''); }
+/**
+ * Second matching form with the connector word "and" dropped. FootageStore and
+ * the Hub disagree on whether "and" is spelled out — e.g. Hub "nathan-sons"
+ * vs FootageStore "nathanandsons". Comparing the "and"-stripped forms bridges
+ * that. Verified against all live clients to produce no false matches.
+ */
+function normalizeNameNoAnd(s){ return normalizeName(s).replace(/and/g,''); }
+/** All lookup keys a name/slug could match a brand kit under. */
+function brandKitKeys(s){ return [normalizeName(s), normalizeNameNoAnd(s)]; }
+/** Return the Hub brand-kit slug for a client, or null if it has no kit. */
+function brandKitSlugFor(client){
+  if(!client||!state.brandKits.size) return null;
+  var keys=brandKitKeys(client.name).concat(brandKitKeys(client.slug));
+  for(var i=0;i<keys.length;i++){ if(keys[i]&&state.brandKits.has(keys[i])) return state.brandKits.get(keys[i]); }
+  return null;
+}
 /** Return a deterministic avatar background colour based on the first character of a name. */
 function avatarColor(n){return AVATAR_COLORS[(n.charCodeAt(0)||0)%AVATAR_COLORS.length];}
 /** Render the client list in the sidebar from state.clients. */
@@ -710,8 +758,14 @@ function renderClientList(){
     var btn=document.createElement('button');
     btn.className='client-item'+(state.activeClient&&state.activeClient.id===c.id?' client-item--active':'');
     var col=avatarColor(c.name);
-    btn.innerHTML='<div class="client-avatar" style="background:'+col+'22;color:'+col+'">'+esc(c.name[0].toUpperCase())+'</div><span class="client-name">'+esc(c.name)+'</span><span class="client-count">'+esc(c.clipCount)+'</span>';
+    var bkSlug=brandKitSlugFor(c);
+    var bkIcon=bkSlug?'<span class="client-bk-btn" title="Open brand kit"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2C6.5 2 2 6 2 11c0 4 3 7 7 7 1 0 1.5-.8 1.5-1.5 0-.5-.3-.9-.3-1.4 0-.7.6-1.3 1.3-1.3H13c3.3 0 6-2.5 6-5.8C19 4.9 15.9 2 12 2z"/></svg></span>':'';
+    btn.innerHTML='<div class="client-avatar" style="background:'+col+'22;color:'+col+'">'+esc(c.name[0].toUpperCase())+'</div><span class="client-name">'+esc(c.name)+'</span><span class="client-count">'+esc(c.clipCount)+'</span>'+bkIcon;
     btn.addEventListener('click',function(){selectClient(c);});
+    if(bkSlug){
+      var bkBtn=btn.querySelector('.client-bk-btn');
+      if(bkBtn) bkBtn.addEventListener('click',function(e){ e.stopPropagation(); openBrandKit(bkSlug, c.name); });
+    }
     el.appendChild(btn);
   });
 }
@@ -1288,7 +1342,7 @@ function setupModalControls(){
   document.addEventListener('mouseup',function(){drag=false;});
   document.getElementById('modal-overlay').addEventListener('click',function(e){if(e.target===document.getElementById('modal-overlay'))closeModal();});
   document.getElementById('modal-close').addEventListener('click',closeModal);
-  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeModal();closeBrandKit();}});
   document.getElementById('modal-copy-btn').addEventListener('click',function(){
     var fn=document.getElementById('modal-filename').textContent;
     if(!fn) return;
@@ -1332,6 +1386,135 @@ function setupModalControls(){
   });
 }
 
+
+// ── Clipboard ──────────────────────────────────────────────────────────────────
+/** Copy text to the clipboard. navigator.clipboard is unavailable in CEP's
+ *  file:// context, so use the execCommand textarea fallback. */
+function copyText(str, okMsg){
+  if(str==null||str==='') return;
+  try{
+    var ta=document.createElement('textarea');
+    ta.value=String(str); ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast(okMsg||'Copied','info');
+  }catch(e){ log('warn','copyText failed',e); showToast('Copy failed','error'); }
+}
+
+// ── Brand kit ──────────────────────────────────────────────────────────────────
+/** Open the brand-kit modal for a client and fetch its kit from the proxy. */
+async function openBrandKit(slug, clientName){
+  state.bkClient=slug;
+  document.getElementById('bk-title').textContent=clientName||'Brand Kit';
+  var body=document.getElementById('bk-body');
+  body.innerHTML='<div class="empty-state"><div class="spinner"></div><p>Loading brand kit...</p></div>';
+  document.getElementById('bk-overlay').classList.add('open');
+  try{
+    var kit=await apiJSON('/api/brand-kits/'+encodeURIComponent(slug));
+    if(state.bkClient!==slug) return; // user opened a different one meanwhile
+    renderBrandKit(kit);
+  }catch(err){
+    if(state.bkClient!==slug) return;
+    log('warn','openBrandKit failed',err);
+    body.innerHTML='<div class="bk-empty">Couldn’t load this brand kit. '+esc(err.message||'')+'</div>';
+  }
+}
+// Brand-kit font/asset links come from the Hub and may be root-relative
+// (e.g. "/api/brand-kits/…/fonts/1"). Resolve those against the Hub origin so
+// they open in the editor's browser; absolute http(s) links pass through.
+var HUB_ORIGIN = 'https://hub.fraggell.com';
+function bkResolveUrl(u){
+  u=String(u||'');
+  if(!u) return '';
+  if(/^https?:\/\//i.test(u)) return u;
+  if(u.charAt(0)==='/') return HUB_ORIGIN+u;
+  return u;
+}
+/** Derive an HSL string from a #rrggbb hex (fallback when the kit has no hsl). */
+function hexToHsl(hex){
+  var m=/^#?([0-9a-f]{6})$/i.exec(String(hex||'').trim()); if(!m) return '';
+  var n=parseInt(m[1],16), r=(n>>16&255)/255, g=(n>>8&255)/255, b=(n&255)/255;
+  var mx=Math.max(r,g,b), mn=Math.min(r,g,b), l=(mx+mn)/2, h=0, s=0;
+  if(mx!==mn){ var d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4; h/=6; }
+  return 'hsl('+Math.round(h*360)+' '+Math.round(s*100)+'% '+Math.round(l*100)+'%)';
+}
+/** Render the fetched brand kit (colours, fonts, assets) into the modal body. */
+function renderBrandKit(kit){
+  var data=(kit&&kit.data)||{};
+  var colours=Array.isArray(data.colours)?data.colours:[];
+  var fonts=Array.isArray(data.fonts)?data.fonts:[];
+  var assets=Array.isArray(data.assets)?data.assets:[];
+  var html='';
+
+  if(colours.length){
+    html+='<div class="bk-section-label">Colours</div><div class="bk-swatches">';
+    colours.forEach(function(c,i){
+      var hex=(c.hex||'').trim();
+      var hsl=c.hsl||hexToHsl(hex);
+      html+='<div class="bk-swatch">'+
+        '<div class="bk-chip" data-copy="'+esc(hex)+'" data-msg="Copied '+esc(hex)+'" style="background:'+esc(/^#?[0-9a-fA-F]{3,8}$/.test(hex)?hex:'#888')+'"></div>'+
+        '<div class="bk-swatch-meta">'+
+          '<div class="bk-swatch-name">'+esc(c.name||hex||'Colour '+(i+1))+'</div>'+
+          (c.usage?'<div class="bk-swatch-usage" title="'+esc(c.usage)+'">'+esc(c.usage)+'</div>':(c.role?'<div class="bk-swatch-usage">'+esc(c.role)+'</div>':''))+
+          '<div class="bk-copy-row">'+
+            (hex?'<span class="bk-copy-btn" data-copy="'+esc(hex)+'" data-msg="Copied '+esc(hex)+'">'+esc(hex)+'</span>':'')+
+            (hsl?'<span class="bk-copy-btn" data-copy="'+esc(hsl)+'" data-msg="Copied HSL">HSL</span>':'')+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    });
+    html+='</div>';
+  }
+
+  if(fonts.length){
+    html+='<div class="bk-section-label">Fonts</div>';
+    fonts.forEach(function(f){
+      var sub=[];
+      if(f.role) sub.push(esc(f.role));
+      if(Array.isArray(f.weights)&&f.weights.length) sub.push(esc(f.weights.join(', ')));
+      var link=f.linkUrl||f.fileUrl||'';
+      var linkLabel=f.fileUrl&&!f.linkUrl?'Download':'Get font';
+      html+='<div class="bk-font">'+
+        '<div class="bk-font-body">'+
+          '<div class="bk-font-name">'+esc(f.name||'Font')+'</div>'+
+          '<div class="bk-font-sub">'+sub.join(' · ')+(f.license?'<span class="bk-lic">'+esc(f.license)+'</span>':'')+'</div>'+
+        '</div>'+
+        '<div class="bk-font-actions">'+
+          '<span class="bk-link-btn" data-copy="'+esc(f.name||'')+'" data-msg="Font name copied">Copy name</span>'+
+          (link?'<span class="bk-link-btn" data-open="'+esc(link)+'">'+linkLabel+'</span>':'')+
+        '</div>'+
+      '</div>';
+    });
+  }
+
+  if(assets.length){
+    html+='<div class="bk-section-label">Assets</div>';
+    assets.forEach(function(a){
+      if(!a||!a.url) return;
+      html+='<div class="bk-font"><div class="bk-font-body"><div class="bk-font-name">'+esc(a.label||a.type||'Asset')+'</div>'+
+        (a.type?'<div class="bk-font-sub">'+esc(a.type)+'</div>':'')+'</div>'+
+        '<div class="bk-font-actions"><span class="bk-link-btn" data-open="'+esc(a.url)+'">Open</span></div></div>';
+    });
+  }
+
+  if(!colours.length&&!fonts.length&&!assets.length){
+    html='<div class="bk-empty">This brand kit has no colours or fonts yet.</div>';
+  }
+
+  var body=document.getElementById('bk-body');
+  body.innerHTML=html;
+  // Wire copy + open actions (delegation is simplest here).
+  body.querySelectorAll('[data-copy]').forEach(function(el){
+    el.addEventListener('click',function(){ copyText(el.getAttribute('data-copy'), el.getAttribute('data-msg')||'Copied'); });
+  });
+  body.querySelectorAll('[data-open]').forEach(function(el){
+    el.addEventListener('click',function(){ var u=bkResolveUrl(el.getAttribute('data-open')); if(u) getCS().openURLInDefaultBrowser(u); });
+  });
+}
+/** Close the brand-kit modal. */
+function closeBrandKit(){ document.getElementById('bk-overlay').classList.remove('open'); state.bkClient=null; }
 
 // ── Import to Premiere ─────────────────────────────────────────────────────────────
 /**
@@ -1473,6 +1656,42 @@ function showToast(msg,type){
   setTimeout(function(){t.classList.remove('toast--visible');setTimeout(function(){t.remove();},300);},5000);
 }
 
+// ── Sidebar collapse + sort ─────────────────────────────────────────────────────
+/** Apply the current sidebar-collapsed state to the DOM + toggle button. */
+function applySidebarCollapsed(){
+  var app=document.getElementById('app');
+  var btn=document.getElementById('sidebar-toggle');
+  if(app) app.classList.toggle('sidebar-collapsed', !!state.sidebarCollapsed);
+  if(btn){
+    btn.classList.toggle('active', !!state.sidebarCollapsed);
+    btn.setAttribute('aria-pressed', state.sidebarCollapsed?'true':'false');
+    btn.title=state.sidebarCollapsed?'Show client list':'Hide client list';
+  }
+}
+/** Toggle the client sidebar open/closed and remember the choice. */
+function toggleSidebar(){
+  state.sidebarCollapsed=!state.sidebarCollapsed;
+  setPref(PREF_SIDEBAR, state.sidebarCollapsed);
+  applySidebarCollapsed();
+}
+/** Update the sort button label + icon direction to match state.sortOrder. */
+function applySortLabel(){
+  var lbl=document.getElementById('sort-label'), btn=document.getElementById('sort-btn');
+  if(lbl) lbl.textContent=state.sortOrder==='oldest'?'Oldest':'Newest';
+  if(btn){ btn.classList.toggle('oldest', state.sortOrder==='oldest'); btn.title='Sorted by upload date ('+(state.sortOrder==='oldest'?'oldest first':'newest first')+') — click to flip'; }
+}
+/** Flip the clip sort order, remember it, and reload the active client's clips. */
+function toggleSort(){
+  state.sortOrder=state.sortOrder==='oldest'?'newest':'oldest';
+  setPref(PREF_SORT, state.sortOrder);
+  applySortLabel();
+  if(state.activeClient){
+    state.clips=[]; state.currentPage=1;
+    document.getElementById('clip-grid').innerHTML='<div class="empty-state"><div class="spinner"></div><p>Sorting...</p></div>';
+    loadClips(state.activeClient.id,1,false).then(buildFilterMenus).catch(function(err){ showToast('Sort failed: '+err.message,'error'); });
+  }
+}
+
 // ── Events ────────────────────────────────────────────────────────────────────
 
 /**
@@ -1507,6 +1726,8 @@ function setupLoginEvents(){
  */
 function setupHeaderEvents(){
   document.getElementById('logout-btn').addEventListener('click',logout);
+  var sbt=document.getElementById('sidebar-toggle');
+  if(sbt) sbt.addEventListener('click',toggleSidebar);
   var cub = document.getElementById('check-update-btn');
   if(cub) cub.addEventListener('click', function(){ checkForUpdate(true); });
   var ub = document.getElementById('update-badge');
@@ -1578,6 +1799,12 @@ function setupPanelEvents(){
       }catch(err){}
     },500));
   }
+  var sortBtn=document.getElementById('sort-btn');
+  if(sortBtn) sortBtn.addEventListener('click',toggleSort);
+  var bkClose=document.getElementById('bk-close');
+  if(bkClose) bkClose.addEventListener('click',closeBrandKit);
+  var bkOverlay=document.getElementById('bk-overlay');
+  if(bkOverlay) bkOverlay.addEventListener('click',function(e){ if(e.target===bkOverlay) closeBrandKit(); });
   document.querySelectorAll('.gs-btn').forEach(function(b){
     b.addEventListener('click',function(){
       state.gridSize=b.dataset.size;
