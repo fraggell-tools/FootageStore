@@ -124,9 +124,10 @@ export const imports = pgTable("imports", {
   clientId: uuid("client_id")
     .notNull()
     .references(() => clients.id, { onDelete: "cascade" }),
-  sourceFolderId: varchar("source_folder_id", { length: 255 }).notNull(),
+  sourceFolderId: text("source_folder_id").notNull(),
   sourceFolderName: varchar("source_folder_name", { length: 500 }).notNull(),
   selection: jsonb("selection").$type<ImportSelection>().notNull(),
+  source: varchar("source", { length: 20 }).$type<"drive" | "dropbox">().notNull().default("drive"),
   status: importStatusEnum("status").notNull().default("pending"),
   totalFiles: integer("total_files").notNull().default(0),
   copiedFiles: integer("copied_files").notNull().default(0),
