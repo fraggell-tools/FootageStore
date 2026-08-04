@@ -6,53 +6,10 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../src/lib/db";
 import { clients, imports, type ImportError } from "../../src/lib/db/schema";
-import {
-  listFolderChildren,
-  copyDriveFile,
-  findChildFolderByName,
-  createFolder,
-} from "../../src/lib/gdrive";
+import { listFolderChildren, copyDriveFile } from "../../src/lib/gdrive";
 import { buildCopyPlan } from "./importPlan";
 import { withDriveRetry } from "./driveRetry";
-
-/** Resolve (find or create) the destination folder for a relative path, cached. */
-async function ensureFolderPath(
-  clientFolderId: string,
-  relativePath: string[],
-  cache: Map<string, string>
-): Promise<string> {
-  let parentId = clientFolderId;
-  let key = "";
-  for (const name of relativePath) {
-    key = key ? `${key}/${name}` : name;
-    const cached = cache.get(key);
-    if (cached) {
-      parentId = cached;
-      continue;
-    }
-    let folderId = await withDriveRetry(() => findChildFolderByName(parentId, name));
-    if (!folderId) {
-      folderId = await withDriveRetry(() => createFolder(parentId, name));
-      console.log(`[Import] Created folder: ${key}`);
-    }
-    cache.set(key, folderId);
-    parentId = folderId;
-  }
-  return parentId;
-}
-
-/** Names of files already in a destination folder, cached per folder. */
-async function getExistingNames(
-  folderId: string,
-  cache: Map<string, Set<string>>
-): Promise<Set<string>> {
-  const cached = cache.get(folderId);
-  if (cached) return cached;
-  const children = await withDriveRetry(() => listFolderChildren(folderId));
-  const names = new Set(children.files.map((f) => f.name));
-  cache.set(folderId, names);
-  return names;
-}
+import { ensureFolderPath, getExistingNames } from "./importShared";
 
 export async function importDrive(data: { importId: string }): Promise<void> {
   const { importId } = data;
