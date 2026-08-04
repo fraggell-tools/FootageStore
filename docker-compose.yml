@@ -25,6 +25,9 @@ services:
       - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      # Brand Kit proxy → Hub (token stays server-side; HUB_BASE_URL defaults to hub.fraggell.com)
+      - SOP_SERVICE_TOKEN=${SOP_SERVICE_TOKEN}
+      - HUB_BASE_URL=${HUB_BASE_URL:-https://hub.fraggell.com}
     volumes:
       - /mnt/user/appdata/footagestore/data:/data
     depends_on:

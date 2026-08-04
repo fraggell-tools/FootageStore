@@ -350,7 +350,7 @@ var state = {
   searchQuery:'', filterShotType:null, filterTags:new Set(), filterSkus:new Set(),
   filterMonths:new Set(), filterAngles:new Set(),
   gridSize:'md', projectName:'No project open',
-  sortOrder:'newest', brandKits:new Map(), bkClient:null,
+  sortOrder:'newest', brandKits:new Map(), brandKitList:[], bkClient:null,
   vttCache:new Map(), spriteCache:new Map(),
   thumbCache:new Map(),
   pathCache:new Map(),
@@ -612,7 +612,7 @@ async function loadClients(){ var data=await apiJSON('/api/clients'); state.clie
 async function loadBrandKits(){
   try{
     var data=await apiJSON('/api/brand-kits');
-    state.brandKits.clear();
+    state.brandKits.clear(); state.brandKitList=[];
     // Register each kit under both its plain and "and"-stripped normalized slug
     // so client names that spell "and" out (or don't) still resolve. Plain form
     // is set last so an exact match always wins over the looser one.
@@ -620,6 +620,7 @@ async function loadBrandKits(){
       if(!k||!k.slug) return;
       var na=normalizeNameNoAnd(k.slug); if(na && !state.brandKits.has(na)) state.brandKits.set(na, k.slug);
       state.brandKits.set(normalizeName(k.slug), k.slug);
+      state.brandKitList.push({norm:normalizeName(k.slug), slug:k.slug});
     });
     if(state.clients.length) renderClientList();
   }catch(err){ log('warn','loadBrandKits failed',err); }
@@ -741,12 +742,28 @@ function normalizeName(s){ return String(s==null?'':s).toLowerCase().replace(/&/
 function normalizeNameNoAnd(s){ return normalizeName(s).replace(/and/g,''); }
 /** All lookup keys a name/slug could match a brand kit under. */
 function brandKitKeys(s){ return [normalizeName(s), normalizeNameNoAnd(s)]; }
+/**
+ * Last-resort match: the two slugs differ only by a trailing word one side omits
+ * (Hub "inessa" vs FootageStore "inessawellness"; Hub "protein-com" vs "protein").
+ * Match when the shorter normalized form (≥5 chars, to avoid trivial collisions)
+ * is a prefix of the longer. Verified against the live client set to add no false
+ * matches; the length floor keeps it from over-reaching as clients are added.
+ */
+function brandKitPrefixMatch(name){
+  var n=normalizeName(name); if(n.length<5) return null;
+  for(var i=0;i<state.brandKitList.length;i++){
+    var h=state.brandKitList[i].norm; if(!h) continue;
+    var shorter=n.length<=h.length?n:h, longer=n.length<=h.length?h:n;
+    if(shorter.length>=5 && longer.indexOf(shorter)===0) return state.brandKitList[i].slug;
+  }
+  return null;
+}
 /** Return the Hub brand-kit slug for a client, or null if it has no kit. */
 function brandKitSlugFor(client){
   if(!client||!state.brandKits.size) return null;
   var keys=brandKitKeys(client.name).concat(brandKitKeys(client.slug));
   for(var i=0;i<keys.length;i++){ if(keys[i]&&state.brandKits.has(keys[i])) return state.brandKits.get(keys[i]); }
-  return null;
+  return brandKitPrefixMatch(client.name)||brandKitPrefixMatch(client.slug);
 }
 /** Return a deterministic avatar background colour based on the first character of a name. */
 function avatarColor(n){return AVATAR_COLORS[(n.charCodeAt(0)||0)%AVATAR_COLORS.length];}
