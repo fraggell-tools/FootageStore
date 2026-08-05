@@ -24,6 +24,67 @@ export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploading = useRef(false);
 
+  // Inline "new folder" (creates a top-level folder on the shared drive and
+  // registers it, then selects it as the upload destination).
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [folderError, setFolderError] = useState("");
+
+  const createFolder = useCallback(async () => {
+    const name = newFolderName.trim();
+    if (!name || creatingFolder) return;
+    setCreatingFolder(true);
+    setFolderError("");
+    try {
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not create folder");
+      // Add to the list, select it, and reset the input.
+      setClients((prev) =>
+        [...prev, { id: data.id, name: data.name, slug: data.slug }].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        )
+      );
+      setSelectedClientId(data.id);
+      setNewFolderName("");
+      setShowNewFolder(false);
+    } catch (err) {
+      setFolderError(err instanceof Error ? err.message : "Could not create folder");
+    } finally {
+      setCreatingFolder(false);
+    }
+  }, [newFolderName, creatingFolder]);
+
+  // "Sync from Drive" — pull in folders created directly in Google Drive without
+  // waiting for the worker's ~3-minute cycle.
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
+
+  const syncFromDrive = useCallback(async () => {
+    if (syncing) return;
+    setSyncing(true);
+    setSyncMsg("");
+    try {
+      const res = await fetch("/api/clients/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      const listRes = await fetch("/api/clients");
+      const listData = await listRes.json();
+      setClients(Array.isArray(listData) ? listData : listData.clients || []);
+      const n = data.clientsCreated || 0;
+      setSyncMsg(n > 0 ? `Found ${n} new folder${n === 1 ? "" : "s"} from Drive.` : "Up to date — no new folders.");
+    } catch (err) {
+      setSyncMsg(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }, [syncing]);
+
   useEffect(() => {
     fetch("/api/clients")
       .then((res) => res.json())
@@ -186,22 +247,79 @@ export default function UploadPage() {
 
       <div className="mb-6">
         <label className="block text-sm font-medium text-neutral-300 mb-2">
-          Client
+          Client / folder
         </label>
-        <select
-          value={selectedClientId}
-          onChange={(e) => setSelectedClientId(e.target.value)}
-          className="bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-fg focus:outline-none focus:border-accent w-full max-w-sm appearance-none"
-        >
-          <option value="" disabled>
-            Select a client...
-          </option>
-          {clients.map((client) => (
-            <option key={client.id} value={client.id}>
-              {client.name}
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={selectedClientId}
+            onChange={(e) => setSelectedClientId(e.target.value)}
+            className="bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-fg focus:outline-none focus:border-accent w-full max-w-sm appearance-none"
+          >
+            <option value="" disabled>
+              Select a client...
             </option>
-          ))}
-        </select>
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+          {!showNewFolder && (
+            <button
+              type="button"
+              onClick={() => { setShowNewFolder(true); setFolderError(""); }}
+              className="text-sm text-accent hover:text-accent-hover border border-border rounded-lg px-3 py-2.5 whitespace-nowrap"
+            >
+              + New folder
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={syncFromDrive}
+            disabled={syncing}
+            title="Pull in folders created directly in Google Drive"
+            className="text-sm text-muted hover:text-fg border border-border rounded-lg px-3 py-2.5 whitespace-nowrap disabled:opacity-50"
+          >
+            {syncing ? "Syncing…" : "↺ Sync from Drive"}
+          </button>
+        </div>
+        {syncMsg && <p className="text-muted text-xs mt-2">{syncMsg}</p>}
+
+        {showNewFolder && (
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <input
+              type="text"
+              autoFocus
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") createFolder();
+                if (e.key === "Escape") { setShowNewFolder(false); setNewFolderName(""); setFolderError(""); }
+              }}
+              placeholder="New folder name"
+              className="bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-fg focus:outline-none focus:border-accent w-full max-w-xs"
+            />
+            <button
+              type="button"
+              onClick={createFolder}
+              disabled={creatingFolder || !newFolderName.trim()}
+              className="text-sm bg-accent text-white rounded-lg px-3 py-2.5 disabled:opacity-50 whitespace-nowrap"
+            >
+              {creatingFolder ? "Creating…" : "Create"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowNewFolder(false); setNewFolderName(""); setFolderError(""); }}
+              className="text-sm text-muted hover:text-fg px-2 py-2.5"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {folderError && <p className="text-red-400 text-xs mt-2">{folderError}</p>}
+        <p className="text-muted text-xs mt-2">
+          Creating a folder makes a new top-level folder on the shared drive; footage you upload lands there.
+        </p>
       </div>
 
       <div

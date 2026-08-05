@@ -20,6 +20,95 @@ export interface SyncResult {
  * - Video files in each folder become clips
  * - Missing folders/files get cleaned up from DB
  */
+export interface FolderSyncResult {
+  clientsCreated: number;
+  clientsRemoved: number;
+  errors: string[];
+}
+
+/**
+ * Fast folder→client discovery only (no per-folder file scan). Used by the
+ * on-demand "Sync from Drive" button so a folder someone just made in Drive shows
+ * up as a client immediately; the heavier clip sync stays on the worker's cycle.
+ */
+export async function syncClientFolders(): Promise<FolderSyncResult> {
+  const result: FolderSyncResult = { clientsCreated: 0, clientsRemoved: 0, errors: [] };
+
+  const driveFolders = await listClientFolders();
+  const driveFolderIds = new Set(driveFolders.map((f) => f.id));
+  const existingClients = await db.select().from(clients);
+
+  // SAFETY: an empty folder list alongside a non-empty DB almost always means
+  // the app account lost access to the parent folder (drive move, permission
+  // change) — not that every client was really deleted. Deleting here would
+  // cascade-drop every clip with its code, AI analysis and tags. Skip instead.
+  if (driveFolders.length === 0 && existingClients.length > 0) {
+    result.errors.push(
+      "Drive returned 0 client folders but the DB has clients — skipping sync (possible access loss)"
+    );
+    return result;
+  }
+  const existingByDriveId = new Map(
+    existingClients.filter((c) => c.driveFolderId).map((c) => [c.driveFolderId!, c])
+  );
+
+  // Create clients for new folders
+  for (const folder of driveFolders) {
+    if (!existingByDriveId.has(folder.id)) {
+      const slug = folder.name
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+
+      try {
+        await db.insert(clients).values({
+          name: folder.name,
+          slug: slug || `client-${folder.id.slice(0, 8)}`,
+          driveFolderId: folder.id,
+        });
+        result.clientsCreated++;
+      } catch {
+        // Slug conflict — append a suffix
+        try {
+          await db.insert(clients).values({
+            name: folder.name,
+            slug: `${slug}-${folder.id.slice(0, 6)}`,
+            driveFolderId: folder.id,
+          });
+          result.clientsCreated++;
+        } catch (innerErr) {
+          result.errors.push(`Failed to create client for folder "${folder.name}": ${(innerErr as Error).message}`);
+        }
+      }
+    } else {
+      // Update name if it changed in Drive
+      const existing = existingByDriveId.get(folder.id)!;
+      if (existing.name !== folder.name) {
+        const slug = folder.name
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "");
+        await db
+          .update(clients)
+          .set({ name: folder.name, slug: slug || existing.slug, updatedAt: new Date() })
+          .where(eq(clients.id, existing.id));
+      }
+    }
+  }
+
+  // Remove clients whose Drive folders no longer exist
+  for (const client of existingClients) {
+    if (client.driveFolderId && !driveFolderIds.has(client.driveFolderId)) {
+      await db.delete(clients).where(eq(clients.id, client.id));
+      result.clientsRemoved++;
+    }
+  }
+
+  return result;
+}
+
 export async function syncFromDrive(): Promise<SyncResult> {
   const result: SyncResult = {
     clientsCreated: 0,
@@ -30,81 +119,14 @@ export async function syncFromDrive(): Promise<SyncResult> {
   };
 
   try {
-    // 1. Sync folders → clients
-    const driveFolders = await listClientFolders();
-    const driveFolderIds = new Set(driveFolders.map((f) => f.id));
-
-    // Get existing clients from DB
-    const existingClients = await db.select().from(clients);
-
-    // SAFETY: an empty folder list alongside a non-empty DB almost always means
-    // the app account lost access to the parent folder (drive move, permission
-    // change) — not that every client was really deleted. Deleting here would
-    // cascade-drop every clip with its code, AI analysis and tags. Skip instead.
-    if (driveFolders.length === 0 && existingClients.length > 0) {
-      result.errors.push(
-        "Drive returned 0 client folders but the DB has clients — skipping sync (possible access loss)"
-      );
+    // 1. Sync folders → clients (shared with the on-demand button)
+    const folderSync = await syncClientFolders();
+    result.clientsCreated = folderSync.clientsCreated;
+    result.clientsRemoved = folderSync.clientsRemoved;
+    result.errors.push(...folderSync.errors);
+    // If the folder sync bailed for safety (0 folders vs non-empty DB), stop.
+    if (folderSync.errors.some((e) => e.includes("possible access loss"))) {
       return result;
-    }
-    const existingByDriveId = new Map(
-      existingClients
-        .filter((c) => c.driveFolderId)
-        .map((c) => [c.driveFolderId!, c])
-    );
-
-    // Create clients for new folders
-    for (const folder of driveFolders) {
-      if (!existingByDriveId.has(folder.id)) {
-        const slug = folder.name
-          .toLowerCase()
-          .trim()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, "");
-
-        try {
-          await db.insert(clients).values({
-            name: folder.name,
-            slug: slug || `client-${folder.id.slice(0, 8)}`,
-            driveFolderId: folder.id,
-          });
-          result.clientsCreated++;
-        } catch (err) {
-          // Slug conflict — append a suffix
-          try {
-            await db.insert(clients).values({
-              name: folder.name,
-              slug: `${slug}-${folder.id.slice(0, 6)}`,
-              driveFolderId: folder.id,
-            });
-            result.clientsCreated++;
-          } catch (innerErr) {
-            result.errors.push(`Failed to create client for folder "${folder.name}": ${(innerErr as Error).message}`);
-          }
-        }
-      } else {
-        // Update name if it changed in Drive
-        const existing = existingByDriveId.get(folder.id)!;
-        if (existing.name !== folder.name) {
-          const slug = folder.name
-            .toLowerCase()
-            .trim()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-|-$/g, "");
-          await db
-            .update(clients)
-            .set({ name: folder.name, slug: slug || existing.slug, updatedAt: new Date() })
-            .where(eq(clients.id, existing.id));
-        }
-      }
-    }
-
-    // Remove clients whose Drive folders no longer exist
-    for (const client of existingClients) {
-      if (client.driveFolderId && !driveFolderIds.has(client.driveFolderId)) {
-        await db.delete(clients).where(eq(clients.id, client.id));
-        result.clientsRemoved++;
-      }
     }
 
     // 2. Sync files → clips
