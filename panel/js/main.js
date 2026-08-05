@@ -1,7 +1,7 @@
 'use strict';
 
 const API_BASE      = 'https://footagestore.fraggell.com';
-const PANEL_VERSION = '2.0.1';
+const PANEL_VERSION = '2.1.0';
 const PLUGIN_AUTH   = API_BASE;   // auth goes through Cloudflare, works for all editors
 const PROXY_BASE    = API_BASE;   // proxies served via /api/assets/{id}/proxy.mp4
 const PAGE_LIMIT    = 24;
@@ -352,6 +352,7 @@ var state = {
   filterMonths:new Set(), filterAngles:new Set(),
   gridSize:'md', projectName:'No project open',
   sortOrder:'newest', brandKits:new Map(), brandKitList:[], bkClient:null,
+  brief:{project:null, data:null, checking:false},
   vttCache:new Map(), spriteCache:new Map(),
   thumbCache:new Map(),
   pathCache:new Map(),
@@ -1502,7 +1503,7 @@ function setupModalControls(){
   document.addEventListener('mouseup',function(){drag=false;});
   document.getElementById('modal-overlay').addEventListener('click',function(e){if(e.target===document.getElementById('modal-overlay'))closeModal();});
   document.getElementById('modal-close').addEventListener('click',closeModal);
-  document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeModal();closeBrandKit();}});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeModal();closeBrandKit();closeBrief();}});
   document.getElementById('modal-copy-btn').addEventListener('click',function(){
     var fn=document.getElementById('modal-filename').textContent;
     if(!fn) return;
@@ -1676,6 +1677,100 @@ function renderBrandKit(kit){
 /** Close the brand-kit modal. */
 function closeBrandKit(){ document.getElementById('bk-overlay').classList.remove('open'); state.bkClient=null; }
 
+// ── Concept brief ──────────────────────────────────────────────────────────────
+// The panel resolves the brief for the OPEN Premiere project (app.project.name)
+// via the FootageStore proxy → review app. Auto-matches on the filename; a manual
+// search picker covers names that don't parse.
+var _briefCheckTimer=null;
+function briefHasProject(name){ return !!name && name!=='No project open'; }
+/** Called when the open project changes — show the Brief button + auto-check. */
+function onProjectChanged(name){
+  var btn=document.getElementById('brief-btn');
+  if(!briefHasProject(name)){ if(btn) btn.style.display='none'; state.brief={project:null,data:null,checking:false}; return; }
+  if(btn){ btn.style.display=''; btn.classList.remove('brief-btn--available'); }
+  if(state.brief.project===name && state.brief.data) return; // already resolved
+  state.brief={project:name, data:null, checking:true};
+  if(_briefCheckTimer) clearTimeout(_briefCheckTimer);
+  _briefCheckTimer=setTimeout(function(){ checkBrief(name); }, 400);
+}
+/** Resolve the brief for a project name and update the button "available" state. */
+async function checkBrief(name){
+  try{
+    var data=await apiJSON('/api/concept-brief?project='+encodeURIComponent(name));
+    if(state.brief.project!==name) return; // project changed meanwhile
+    state.brief.data=data; state.brief.checking=false;
+    var btn=document.getElementById('brief-btn');
+    if(btn) btn.classList.toggle('brief-btn--available', !!(data&&data.matched));
+    if(document.getElementById('brief-overlay').classList.contains('open')) renderBrief();
+  }catch(e){ state.brief.checking=false; log('warn','checkBrief failed',e); }
+}
+/** Open the concept-brief modal for the open project. */
+function openBrief(){
+  if(!briefHasProject(state.projectName)) return;
+  document.getElementById('brief-title').textContent=state.projectName;
+  document.getElementById('brief-overlay').classList.add('open');
+  if(!state.brief.data && !state.brief.checking){ state.brief.checking=true; checkBrief(state.projectName); }
+  renderBrief();
+}
+/** Render the modal body from state.brief (brief text, or the manual picker). */
+function renderBrief(){
+  var body=document.getElementById('brief-body'); if(!body) return;
+  var d=state.brief.data;
+  if(state.brief.checking && !d){ body.innerHTML='<div class="empty-state"><div class="spinner"></div><p>Looking up brief…</p></div>'; return; }
+  if(d && d.matched){
+    var html='';
+    if(d.taskName) html+='<div class="brief-hint">Matched: '+esc(d.taskName)+'</div>';
+    html+='<div class="brief-text">'+esc(d.text||'(This brief has no text yet.)')+'</div>';
+    var link=d.docUrl||d.clickupUrl;
+    if(link) html+='<span class="brief-open-btn" data-open="'+esc(link)+'">'+(d.docUrl?'Open Google Doc':'Open in ClickUp')+'</span>';
+    body.innerHTML=html;
+    var ob=body.querySelector('[data-open]');
+    if(ob) ob.addEventListener('click',function(){ var u=ob.getAttribute('data-open'); if(u) getCS().openURLInDefaultBrowser(u); });
+    return;
+  }
+  renderBriefSearch();
+}
+/** Render the manual search picker (when the filename didn't auto-match). */
+function renderBriefSearch(){
+  var body=document.getElementById('brief-body');
+  body.innerHTML=
+    '<div class="brief-empty">No brief auto-matched for <strong>'+esc(state.projectName)+'</strong>. Search for it:</div>'+
+    '<input type="text" id="brief-search" placeholder="e.g. black stuff m6 mashup 3" autocomplete="off" spellcheck="false">'+
+    '<div id="brief-results"></div>';
+  var inp=document.getElementById('brief-search');
+  if(inp){ try{inp.focus();}catch(e){} inp.addEventListener('input',debounce(function(){ briefSearch(inp.value); },350)); }
+}
+/** Query handover tasks and render the result list. */
+async function briefSearch(q){
+  var box=document.getElementById('brief-results'); if(!box) return;
+  q=(q||'').trim();
+  if(q.length<2){ box.innerHTML=''; return; }
+  try{
+    var data=await apiJSON('/api/concept-brief/search?q='+encodeURIComponent(q));
+    var results=(data&&data.results)||[];
+    if(!results.length){ box.innerHTML='<div class="brief-hint">No matching briefs.</div>'; return; }
+    box.innerHTML='';
+    results.forEach(function(r){
+      var el=document.createElement('div'); el.className='brief-result'; el.textContent=r.name;
+      el.addEventListener('click',function(){ pickBrief(r.name); });
+      box.appendChild(el);
+    });
+  }catch(e){ box.innerHTML='<div class="brief-hint">Search failed.</div>'; }
+}
+/** Resolve a manually-picked handover task name and show its brief. */
+async function pickBrief(taskName){
+  var body=document.getElementById('brief-body');
+  body.innerHTML='<div class="empty-state"><div class="spinner"></div><p>Loading brief…</p></div>';
+  try{
+    var data=await apiJSON('/api/concept-brief?project='+encodeURIComponent(taskName));
+    state.brief.data=data;
+    var btn=document.getElementById('brief-btn');
+    if(btn) btn.classList.toggle('brief-btn--available', !!(data&&data.matched));
+    renderBrief();
+  }catch(e){ body.innerHTML='<div class="brief-empty">Couldn’t load that brief.</div>'; }
+}
+function closeBrief(){ document.getElementById('brief-overlay').classList.remove('open'); }
+
 // ── Import to Premiere ─────────────────────────────────────────────────────────────
 /**
  * Resolve each selected clip to a local path on the Shared Drive mount, then
@@ -1806,7 +1901,7 @@ async function downloadSelected(){
 /** Returns a debounced version of fn that fires after ms milliseconds of inactivity. */
 function debounce(fn,ms){var t;return function(){var a=arguments;clearTimeout(t);t=setTimeout(function(){fn.apply(null,a);},ms);};}
 /** Poll Premiere for the current project name and update the header display. */
-function updateProjectName(){getCS().evalScript('getProjectName()',function(r){state.projectName=r||'No project open';var el=document.getElementById('project-name');if(el)el.textContent=state.projectName;});}
+function updateProjectName(){getCS().evalScript('getProjectName()',function(r){var n=r||'No project open';var changed=n!==state.projectName;state.projectName=n;var el=document.getElementById('project-name');if(el)el.textContent=n;if(changed)onProjectChanged(n);});}
 /** Show a temporary notification toast. type: "success" | "error" | "info". */
 function showToast(msg,type){
   var c=document.getElementById('toast-container');
@@ -1956,6 +2051,12 @@ function setupPanelEvents(){
   if(bkClose) bkClose.addEventListener('click',closeBrandKit);
   var bkOverlay=document.getElementById('bk-overlay');
   if(bkOverlay) bkOverlay.addEventListener('click',function(e){ if(e.target===bkOverlay) closeBrandKit(); });
+  var briefBtn=document.getElementById('brief-btn');
+  if(briefBtn) briefBtn.addEventListener('click',openBrief);
+  var briefClose=document.getElementById('brief-close');
+  if(briefClose) briefClose.addEventListener('click',closeBrief);
+  var briefOverlay=document.getElementById('brief-overlay');
+  if(briefOverlay) briefOverlay.addEventListener('click',function(e){ if(e.target===briefOverlay) closeBrief(); });
   document.querySelectorAll('.gs-btn').forEach(function(b){
     b.addEventListener('click',function(){
       state.gridSize=b.dataset.size;

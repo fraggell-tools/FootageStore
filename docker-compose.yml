@@ -31,6 +31,9 @@ services:
       # Brand Kit proxy → Hub (token stays server-side; HUB_BASE_URL defaults to hub.fraggell.com)
       - SOP_SERVICE_TOKEN=${SOP_SERVICE_TOKEN}
       - HUB_BASE_URL=${HUB_BASE_URL:-https://hub.fraggell.com}
+      # Concept Brief proxy → Review app (token stays server-side)
+      - REVIEW_SERVICE_TOKEN=${REVIEW_SERVICE_TOKEN}
+      - REVIEW_BASE_URL=${REVIEW_BASE_URL:-https://review.fraggell.com}
     volumes:
       - /mnt/user/appdata/footagestore/data:/data
     depends_on:

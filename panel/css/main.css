@@ -946,6 +946,75 @@ input  { font-family: var(--font); }
 }
 #code-input-field:focus { border-color: var(--accent); }
 
+/* ── Concept Brief ───────────────────────────────────────────────────────── */
+.brief-btn {
+  display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
+  margin-left: 6px; background: transparent;
+  border: 1px solid var(--border2); border-radius: var(--r);
+  color: var(--text-muted); font-size: 10px; font-weight: 600; white-space: nowrap;
+  transition: color var(--tr), border-color var(--tr), background var(--tr);
+}
+.brief-btn:hover { color: var(--text); border-color: var(--accent); }
+.brief-btn--available {
+  color: var(--accent); border-color: var(--tag-border); background: var(--accent-dim);
+}
+#brief-overlay {
+  display: none; position: fixed; inset: 0; z-index: 110;
+  background: rgba(0,0,0,0.85); align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+}
+#brief-overlay.open { display: flex; }
+#brief-modal {
+  display: flex; flex-direction: column; background: var(--surface);
+  border: 1px solid var(--border3); border-radius: var(--r-xl);
+  width: min(94vw, 480px); max-height: 90vh; overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.03), 0 32px 80px rgba(0,0,0,0.95);
+}
+#brief-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 14px 16px 12px; border-bottom: 1px solid var(--border);
+}
+#brief-kicker {
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 3px;
+}
+#brief-title {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#brief-close { background: transparent; border: none; color: var(--text-dim); display: flex; padding: 2px; border-radius: 4px; transition: color var(--tr); }
+#brief-close:hover { color: var(--text); }
+#brief-body { padding: 14px 16px 18px; overflow-y: auto; }
+#brief-body::-webkit-scrollbar { width: 8px; }
+#brief-body::-webkit-scrollbar-thumb { background: var(--border3); border-radius: 5px; }
+.brief-text {
+  font-size: 11.5px; line-height: 1.55; color: var(--text); white-space: pre-wrap;
+  word-break: break-word; margin-bottom: 14px;
+}
+.brief-open-btn {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600;
+  padding: 6px 10px; background: var(--surface3); border: 1px solid var(--border2);
+  border-radius: 6px; color: var(--text-muted); cursor: pointer;
+  transition: color var(--tr), border-color var(--tr);
+}
+.brief-open-btn:hover { color: var(--accent); border-color: var(--accent); }
+.brief-empty { font-size: 11px; color: var(--text-muted); margin-bottom: 12px; }
+.brief-empty strong { color: var(--text); font-weight: 600; }
+#brief-search {
+  width: 100%; box-sizing: border-box; height: 30px; padding: 0 9px;
+  background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--r);
+  color: var(--text); font-size: 11px; outline: none; margin-bottom: 8px;
+}
+#brief-search:focus { border-color: var(--accent); }
+.brief-result {
+  display: block; width: 100%; text-align: left; padding: 7px 9px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text-muted); font-size: 10.5px; margin-bottom: 5px; cursor: pointer;
+  transition: color var(--tr), border-color var(--tr), background var(--tr);
+}
+.brief-result:hover { color: var(--text); border-color: var(--accent); background: var(--surface3); }
+.brief-hint { font-size: 9.5px; color: var(--text-dim); margin: 2px 0 8px; }
+
 /* ── Sidebar collapse ────────────────────────────────────────────────── */
 #sidebar-toggle { margin-right: 2px; }
 #sidebar-toggle.active { color: var(--accent); }

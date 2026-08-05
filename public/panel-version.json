@@ -1,1 +1,1 @@
-{"version":"2.0.1","notes":"Sign in with your Fraggell Hub account — same login as everything else (passkeys/2-step supported), no separate panel password. Wider client sidebar so names aren't cut off. Plus brand kits, collapsible client list, and newest/oldest sorting."}
+{"version":"2.1.0","notes":"Concept Brief: open the brief for the project you have open in Premiere, right in the panel (auto-matched from the filename, with a manual search if it can't). Plus Hub sign-in, brand kits, collapsible client list, and newest/oldest sorting."}
