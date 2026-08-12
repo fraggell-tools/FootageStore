@@ -71,9 +71,14 @@ foreach ($v in 9, 10, 11, 12) {
 
 # ---- Download the panel (session cookie auth) -------------------------------
 Write-Host ' [2/3] Downloading panel...'
-Invoke-WebRequest -Uri "$API/api/panel/download" `
+$dlResp = Invoke-WebRequest -Uri "$API/api/panel/download" `
   -Headers @{ Cookie = "__Secure-authjs.session-token=$token" } `
-  -OutFile $ZIP -UseBasicParsing | Out-Null
+  -OutFile $ZIP -UseBasicParsing -PassThru
+if ($dlResp.StatusCode -ne 200) {
+  Write-Host " [X] Download failed (HTTP $($dlResp.StatusCode)). Run the installer again." -ForegroundColor Red
+  Remove-Item -Force $ZIP -ErrorAction SilentlyContinue
+  return
+}
 
 # ---- Install ----------------------------------------------------------------
 Write-Host ' [3/3] Installing...'

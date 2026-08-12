@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { decode } from "next-auth/jwt";
 import { auth } from "@/lib/auth";
+import { sessionCookieName } from "@/lib/hub-sso";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -12,10 +14,41 @@ import { join } from "path";
  *
  * panel.zip lives at /data/panel/panel.zip (outside /public so it is
  * never accessible without auth).
+ *
+ * Auth strategy: try auth() first (browser sessions), then fall back to
+ * manually decoding the session cookie from the Cookie header. The
+ * Windows installer sends the JWT directly as a Cookie header and
+ * PowerShell 5.1's Invoke-WebRequest does not throw on 4xx, so a silent
+ * 401 would corrupt the download. The explicit decode ensures panel
+ * installs work even when auth() can't resolve the request context.
  */
-export async function GET(request: NextRequest) {
+async function resolveSession(request: NextRequest): Promise<boolean> {
+  // Primary: NextAuth session context (browser flows)
   const session = await auth();
-  if (!session) {
+  if (session) return true;
+
+  // Fallback: decode the JWT directly from the Cookie header
+  // (used by the Windows/Mac installer scripts)
+  const isSecure = request.url.startsWith("https://");
+  const cookieName = sessionCookieName(isSecure);
+  const rawCookie = request.cookies.get(cookieName)?.value;
+  if (!rawCookie) return false;
+
+  try {
+    const decoded = await decode({
+      token: rawCookie,
+      secret: process.env.NEXTAUTH_SECRET!,
+      salt: cookieName,
+    });
+    return !!(decoded?.email || decoded?.sub);
+  } catch {
+    return false;
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const ok = await resolveSession(request);
+  if (!ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
