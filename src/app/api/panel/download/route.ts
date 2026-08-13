@@ -26,25 +26,28 @@ async function resolveSession(request: NextRequest): Promise<boolean> {
   const session = await auth();
   if (session) return true;
 
-  // Fallback: decode the JWT directly from the Cookie header.
-  // The installer scripts send the session JWT as a raw Cookie header, which
-  // auth() may not resolve. We try both possible cookie names because the
-  // correct name depends on whether the server sees the request as HTTPS or
-  // HTTP, and self-hosted Next.js behind Cloudflare can be ambiguous.
-  const cookieNames = ["__Secure-authjs.session-token", "authjs.session-token"];
-  for (const cookieName of cookieNames) {
+  // Installer fallback A: Authorization: Bearer <token>
+  // PowerShell 5.1's Invoke-WebRequest silently drops Cookie headers (they
+  // are handled specially by .NET's HTTP stack), so installer scripts send
+  // the JWT as a Bearer token instead — a plain header that always goes through.
+  const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (bearer) {
+    for (const cookieName of ["__Secure-authjs.session-token", "authjs.session-token"]) {
+      try {
+        const decoded = await decode({ token: bearer, secret: process.env.NEXTAUTH_SECRET!, salt: cookieName });
+        if (decoded?.email || decoded?.sub) return true;
+      } catch { /* try next salt */ }
+    }
+  }
+
+  // Installer fallback B: Cookie header (kept for any clients that do send it)
+  for (const cookieName of ["__Secure-authjs.session-token", "authjs.session-token"]) {
     const rawCookie = request.cookies.get(cookieName)?.value;
     if (!rawCookie) continue;
     try {
-      const decoded = await decode({
-        token: rawCookie,
-        secret: process.env.NEXTAUTH_SECRET!,
-        salt: cookieName,
-      });
+      const decoded = await decode({ token: rawCookie, secret: process.env.NEXTAUTH_SECRET!, salt: cookieName });
       if (decoded?.email || decoded?.sub) return true;
-    } catch {
-      // try the next name
-    }
+    } catch { /* try next name */ }
   }
   return false;
 }
