@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decode } from "next-auth/jwt";
 import { auth } from "@/lib/auth";
-import { sessionCookieName } from "@/lib/hub-sso";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -27,31 +26,33 @@ async function resolveSession(request: NextRequest): Promise<boolean> {
   const session = await auth();
   if (session) return true;
 
-  // Fallback: decode the JWT directly from the Cookie header
-  // (used by the Windows/Mac installer scripts).
-  // Use x-forwarded-proto to determine the scheme — request.url is the
-  // internal http:// URL from the compose network, not the public HTTPS one.
-  const proto = request.headers.get("x-forwarded-proto") ?? "https";
-  const isSecure = proto === "https";
-  const cookieName = sessionCookieName(isSecure);
-  const rawCookie = request.cookies.get(cookieName)?.value;
-  if (!rawCookie) return false;
-
-  try {
-    const decoded = await decode({
-      token: rawCookie,
-      secret: process.env.NEXTAUTH_SECRET!,
-      salt: cookieName,
-    });
-    return !!(decoded?.email || decoded?.sub);
-  } catch {
-    return false;
+  // Fallback: decode the JWT directly from the Cookie header.
+  // The installer scripts send the session JWT as a raw Cookie header, which
+  // auth() may not resolve. We try both possible cookie names because the
+  // correct name depends on whether the server sees the request as HTTPS or
+  // HTTP, and self-hosted Next.js behind Cloudflare can be ambiguous.
+  const cookieNames = ["__Secure-authjs.session-token", "authjs.session-token"];
+  for (const cookieName of cookieNames) {
+    const rawCookie = request.cookies.get(cookieName)?.value;
+    if (!rawCookie) continue;
+    try {
+      const decoded = await decode({
+        token: rawCookie,
+        secret: process.env.NEXTAUTH_SECRET!,
+        salt: cookieName,
+      });
+      if (decoded?.email || decoded?.sub) return true;
+    } catch {
+      // try the next name
+    }
   }
+  return false;
 }
 
 export async function GET(request: NextRequest) {
   const ok = await resolveSession(request);
   if (!ok) {
+    console.warn("[panel/download] 401 – cookies:", [...request.cookies.getAll().map(c => c.name)]);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
