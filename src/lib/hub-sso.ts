@@ -16,6 +16,7 @@ export const ROLE_MAP: Record<string, "admin" | "editor"> = {
   delivery: "editor",
   producer: "editor",
   creative_strategist: "editor",
+  designer: "editor",
 };
 
 export type HubPayload = {
