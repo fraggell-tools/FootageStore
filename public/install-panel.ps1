@@ -79,6 +79,13 @@ if ($dlResp.StatusCode -ne 200) {
   Remove-Item -Force $ZIP -ErrorAction SilentlyContinue
   return
 }
+# Validate the file is actually a ZIP (PK magic bytes) before attempting extraction.
+$magic = [System.IO.File]::ReadAllBytes($ZIP)[0..1]
+if ($magic[0] -ne 0x50 -or $magic[1] -ne 0x4B) {
+  Write-Host ' [X] Downloaded file is not a valid ZIP. Run the installer again.' -ForegroundColor Red
+  Remove-Item -Force $ZIP -ErrorAction SilentlyContinue
+  return
+}
 
 # ---- Install ----------------------------------------------------------------
 Write-Host ' [3/3] Installing...'
