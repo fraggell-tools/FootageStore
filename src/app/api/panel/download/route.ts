@@ -28,8 +28,11 @@ async function resolveSession(request: NextRequest): Promise<boolean> {
   if (session) return true;
 
   // Fallback: decode the JWT directly from the Cookie header
-  // (used by the Windows/Mac installer scripts)
-  const isSecure = request.url.startsWith("https://");
+  // (used by the Windows/Mac installer scripts).
+  // Use x-forwarded-proto to determine the scheme — request.url is the
+  // internal http:// URL from the compose network, not the public HTTPS one.
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  const isSecure = proto === "https";
   const cookieName = sessionCookieName(isSecure);
   const rawCookie = request.cookies.get(cookieName)?.value;
   if (!rawCookie) return false;
