@@ -24,6 +24,7 @@ export default async function middleware(req: NextRequest) {
     pathname === "/install-panel.sh" ||
     pathname === "/install-panel.bat" ||
     pathname === "/install-panel.ps1" ||
+    pathname === "/api/panel/download" ||  // route handles its own auth via JWT decode
     pathname.match(/\.(svg|png|jpg|ico|js|css|json|sh|bat|ps1|zip)$/)
   ) {
     return NextResponse.next();
