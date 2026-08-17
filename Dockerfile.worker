@@ -8,15 +8,19 @@ FROM node:20-bookworm-slim
 # fraggell-review, vault C182). The build step asserts h264_nvenc is compiled in.
 # If no GPU is present at runtime the worker auto-falls back to libx264 (see
 # generateProxy nvencAvailable()).
+# We mirror the binaries because BtbN publishes a single ROLLING `latest`
+# release rather than pinned artifacts. On 2026-08-17 they rotated it and
+# dropped the n7.1 line, so the URL this used to curl became a hard 404 and
+# this image could no longer be built at all. ghcr.io/fraggell-tools/ffmpeg-nvenc
+# holds the exact binaries already running in prod
+# (n7.1.5-16-g9a4bb2c579-20260816). Always reference the dated tag, never a
+# moving one, since a moving tag is precisely what broke.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl xz-utils ca-certificates procps \
-  && curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz -o /tmp/ffmpeg.tar.xz \
-  && mkdir -p /tmp/ffmpeg && tar -xf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg --strip-components=1 \
-  && cp /tmp/ffmpeg/bin/ffmpeg /tmp/ffmpeg/bin/ffprobe /usr/local/bin/ \
-  && chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe \
-  && ffmpeg -hide_banner -encoders | grep -q h264_nvenc \
-  && apt-get purge -y curl xz-utils && apt-get autoremove -y \
-  && rm -rf /tmp/ffmpeg /tmp/ffmpeg.tar.xz /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends procps \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/fraggell-tools/ffmpeg-nvenc:n7.1.5-20260816 /ffmpeg /ffprobe /usr/local/bin/
+RUN chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe \
+  && ffmpeg -hide_banner -encoders | grep -q h264_nvenc
 
 WORKDIR /app
 
