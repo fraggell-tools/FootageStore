@@ -25,6 +25,13 @@ export default async function middleware(req: NextRequest) {
     pathname === "/install-panel.bat" ||
     pathname === "/install-panel.ps1" ||
     pathname === "/api/panel/download" ||  // route handles its own auth via JWT decode
+    // Server-to-server clip reads (the review app embedding footage clips in
+    // review comments). These accept FOOTAGE_STORE_SERVICE_TOKEN and still fall
+    // back to a session check, so skipping the SSO redirect here doesn't open
+    // them up — without the redirect a service call gets a 307 to hub login
+    // instead of its 401/200.
+    pathname === "/api/clips/lookup" ||
+    /^\/api\/clips\/[^/]+\/(proxy|download|thumbnail)$/.test(pathname) ||
     pathname.match(/\.(svg|png|jpg|ico|js|css|json|sh|bat|ps1|zip)$/)
   ) {
     return NextResponse.next();

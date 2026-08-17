@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isServiceRequest } from "@/lib/service-auth";
 import { db } from "@/lib/db";
 import { clips, clients } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -13,8 +14,10 @@ import { eq } from "drizzle-orm";
  * Premiere plugin.
  */
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isServiceRequest(request)) {
+    const session = await auth();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const code = new URL(request.url).searchParams
     .get("code")

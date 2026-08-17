@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isServiceRequest } from "@/lib/service-auth";
 import { db } from "@/lib/db";
 import { clips } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -14,11 +15,13 @@ import { getR2PresignedUrl } from "@/lib/r2";
  * something to show.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ clipId: string }> }
 ) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isServiceRequest(request)) {
+    const session = await auth();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { clipId } = await params;
 

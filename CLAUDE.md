@@ -98,6 +98,14 @@ Lives at `/mnt/user/appdata/footagestore/app/.env` (or passed via compose enviro
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` — Google Drive OAuth
 - `GOOGLE_DRIVE_PARENT_FOLDER_ID` — where to scan for new media
 - `DROPBOX_APP_KEY` / `DROPBOX_APP_SECRET` / `DROPBOX_REFRESH_TOKEN` — Dropbox shared-link import (app + worker). If unset, Dropbox links are rejected at browse time with a clear message; Drive import is unaffected. Setup: `docs/dropbox-setup.md`.
+- `FOOTAGE_STORE_SERVICE_TOKEN` — shared secret letting the review app
+  (fraggell-review) read clips server-side for footage clips embedded in review
+  comments. Must be the SAME value in `/mnt/user/appdata/fraggell-review/.env`.
+  Accepted by `src/lib/service-auth.ts` on read-only routes only
+  (`clips/lookup`, `clips/[clipId]/proxy|download|thumbnail`), which are also
+  exempted in `middleware.ts` so the SSO redirect doesn't turn a service call
+  into a 307 to hub login. Mutating clip routes still require a session + admin.
+  Unset means the integration is simply off.
 - `DATABASE_URL=postgresql://footagestore:footagestore@db:5432/footagestore` (container-internal DNS)
 - `REDIS_URL=redis://redis:6379`
 

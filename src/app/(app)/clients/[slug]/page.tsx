@@ -228,6 +228,15 @@ export default function ClientDetailPage() {
         }
         setClips(allClips);
 
+        // Deep link: /clients/<slug>?clip=<id> opens straight into that clip's
+        // detail modal. Used by the review app, whose comment chips link back
+        // here when an editor wants the full Footage Store view of a clip.
+        const deepLinkId = new URLSearchParams(window.location.search).get("clip");
+        if (deepLinkId) {
+          const target = allClips.find((c: Clip) => c.id === deepLinkId);
+          if (target) setSelectedClip(target);
+        }
+
         // Fetch collections for this client
         const colRes = await fetch(`/api/collections?clientId=${foundClient.id}`);
         if (colRes.ok) {
