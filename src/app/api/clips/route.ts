@@ -44,6 +44,43 @@ export async function GET(request: NextRequest) {
 
   const where = and(...conditions);
 
+  // Bulk mode: every clip for the client in one response, with a slim column
+  // set. The review app's clip browser mirrors this app's client-side filtering
+  // (tags, month, angle, orientation, roll), which needs the whole set in the
+  // browser rather than a page at a time.
+  //
+  // `description` is deliberately excluded: for the largest client it is 6.7 MB
+  // across 6081 clips versus ~1 MB for everything else, so shipping it would
+  // dominate the payload. Callers using this mode search the remaining fields.
+  if (searchParams.get("all") === "1") {
+    const rows = await db
+      .select({
+        id: clips.id,
+        code: clips.code,
+        name: clips.name,
+        originalFilename: clips.originalFilename,
+        duration: clips.duration,
+        width: clips.width,
+        height: clips.height,
+        shotType: clips.shotType,
+        month: clips.month,
+        angle: clips.angle,
+        tags: clips.tags,
+        productSkus: clips.productSkus,
+        hasSpeech: clips.hasSpeech,
+        proxyStatus: clips.proxyStatus,
+        createdAt: clips.createdAt,
+      })
+      .from(clips)
+      .where(where)
+      .orderBy(sort === "oldest" ? asc(clips.createdAt) : desc(clips.createdAt));
+
+    return NextResponse.json({
+      clips: rows,
+      pagination: { page: 1, limit: rows.length, total: rows.length, totalPages: 1 },
+    });
+  }
+
   const [{ total }] = await db
     .select({ total: count() })
     .from(clips)
