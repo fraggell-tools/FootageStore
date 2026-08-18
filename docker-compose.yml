@@ -34,6 +34,9 @@ services:
       # Concept Brief proxy → Review app (token stays server-side)
       - REVIEW_SERVICE_TOKEN=${REVIEW_SERVICE_TOKEN}
       - REVIEW_BASE_URL=${REVIEW_BASE_URL:-https://review.fraggell.com}
+      # Footage clip embeds in review comments: the review app reads clips
+      # server-side with this shared secret (same value in both apps' .env).
+      - FOOTAGE_STORE_SERVICE_TOKEN=${FOOTAGE_STORE_SERVICE_TOKEN}
     volumes:
       - /mnt/user/appdata/footagestore/data:/data
     depends_on:
