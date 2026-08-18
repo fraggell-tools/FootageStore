@@ -31,6 +31,8 @@ export default async function middleware(req: NextRequest) {
     // them up — without the redirect a service call gets a 307 to hub login
     // instead of its 401/200.
     pathname === "/api/clips/lookup" ||
+    pathname === "/api/clips" ||
+    pathname === "/api/clients" ||
     /^\/api\/clips\/[^/]+\/(proxy|download|thumbnail)$/.test(pathname) ||
     pathname.match(/\.(svg|png|jpg|ico|js|css|json|sh|bat|ps1|zip)$/)
   ) {

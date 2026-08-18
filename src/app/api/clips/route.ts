@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isServiceRequest } from "@/lib/service-auth";
 import { db } from "@/lib/db";
 import { clips } from "@/lib/db/schema";
 import { eq, ilike, sql, desc, asc, count, and, or, getTableColumns } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isServiceRequest(request)) {
+    const session = await auth();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(request.url);
   const clientId = searchParams.get("clientId");
